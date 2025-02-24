@@ -17,5 +17,42 @@
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', sans-serif;
+}
+
+.loader {
+  border: 3px solid rgba(59, 130, 246, 0.1);
+  border-radius: 50%;
+  border-top: 3px solid #3b82f6;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.upload-button {
+  @apply relative overflow-hidden bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-3 px-6 rounded-lg 
+  shadow-lg transform transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-xl 
+  active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50;
+}
+
+.action-button {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 
+  transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-opacity-50;
+}
+
+.play-button {
+  @apply action-button bg-purple-500 text-white hover:bg-purple-600 focus:ring-purple-500;
+}
+
+.record-button {
+  @apply action-button bg-green-500 text-white hover:bg-green-600 focus:ring-green-500;
+}
+
+.stop-button {
+  @apply action-button bg-red-500 text-white hover:bg-red-600 focus:ring-red-500;
 }
