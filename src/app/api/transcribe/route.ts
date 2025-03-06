@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { checkAuth } from '@/utils/auth';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 export async function POST(request: Request) {
+  // Check authentication first
+  const authError = await checkAuth(request as any);
+  if (authError) {
+    return authError;
+  }
+
   try {
     const formData = await request.formData();
     const audioFile = formData.get('audio') as Blob;

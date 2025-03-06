@@ -1,35 +1,80 @@
 "use client";
 
-import Image from "next/image";
+import Image from 'next/image';
 import ImageUpload from './components/ImageUpload';
+import LanguageSelector from './components/LanguageSelector';
+import NavBar from './components/NavBar';
 import { useState } from 'react';
+import { useLanguage } from './context/LanguageContext';
+import { useAuth } from './context/AuthContext';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
+  const { t } = useLanguage();
+  const { user, isLoading: authLoading } = useAuth();
+
+  // If auth is loading, show a loading indicator
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="loader"></div>
+      </div>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-      <div className="max-w-4xl mx-auto px-4 py-12">
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-500">
-            VisionVoice
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300">
-            Upload an image and let AI describe it for you
-          </p>
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 
+      flex flex-col items-center relative">
+      
+      {/* NavBar at the top */}
+      <NavBar />
+      
+      <div className="w-full p-6">
+        {/* Language Selector in top-right corner */}
+        <div className="w-full max-w-[2000px] flex justify-end mb-4">
+          <LanguageSelector />
         </div>
         
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
-          <ImageUpload setIsLoading={setIsLoading} />
-          {isLoading && (
-            <div className="absolute inset-0 bg-white/80 dark:bg-gray-800/80 flex items-center justify-center z-10">
-              <div className="flex flex-col items-center">
-                <div className="loader mb-4"></div>
-                <p className="text-lg text-gray-600 dark:text-gray-300">Processing your image...</p>
-              </div>
+        <div className="w-full max-w-[2000px] space-y-10">
+          {/* Logo and Title Section */}
+          <div className="flex flex-col items-center text-center">
+            <div className="mb-6 w-64 h-64 relative">
+              <Image 
+                src="/aa_logo.svg" 
+                alt="Antiques Appraisal Logo" 
+                fill
+                priority
+                className="object-contain"
+              />
             </div>
-          )}
+            <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-500">
+              {t('title')}
+            </h1>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              {t('subtitle')}
+            </p>
+          </div>
+          
+          {/* Upload Section */}
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700">
+            <div className="p-6">
+              <ImageUpload setIsLoading={setIsLoading} />
+              {isLoading && (
+                <div className="absolute inset-0 bg-white/80 dark:bg-gray-800/80 flex items-center justify-center z-10 backdrop-blur-sm">
+                  <div className="flex flex-col items-center">
+                    <div className="loader mb-4"></div>
+                    <p className="text-lg text-gray-600 dark:text-gray-300">{t('processingImage')}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+        
+        {/* Footer */}
+        <footer className="w-full max-w-[2000px] mt-auto pt-8 text-center text-sm text-gray-500 dark:text-gray-400">
+          <p>© {new Date().getFullYear()} Antiques Appraisal</p>
+        </footer>
       </div>
     </main>
   );

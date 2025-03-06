@@ -2,6 +2,9 @@
 
 import { useState, useRef, Dispatch, SetStateAction } from 'react';
 import { AudioRecorder } from '@/app/components/AudioRecorder';
+import { useLanguage } from '../context/LanguageContext';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ImageUploadProps {
   setIsLoading: Dispatch<SetStateAction<boolean>>;
@@ -13,56 +16,25 @@ interface AIResponse {
 }
 
 export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Updated to arrays to handle multiple images
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
   const [error, setError] = useState<string>('');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showUploadOptions, setShowUploadOptions] = useState(false);
   
-  // New states for voice recording
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordedAudio, setRecordedAudio] = useState<string | null>(null);
+  // Voice recording state
   const [transcription, setTranscription] = useState<string>('');
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
-  const getAiDescription = async (file: File) => {
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/upload-image', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to get image description');
-      }
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setAiResponse(data);
-      
-      // Automatically play the speech after getting description
-      if (data.description) {
-        playDescription(data.description + '. ' + data.remarks);
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to analyze image. Please try again.';
-      setError(errorMessage);
-      console.error('Error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Reference to file inputs
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  
+  // Get translation function
+  const { t, language } = useLanguage();
 
   const playDescription = async (text: string) => {
     try {
@@ -97,124 +69,102 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   };
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setIsLoading(true);
-      setError('');
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      // Create new arrays with existing images and new images
+      const newImageUrls = [...selectedImages];
+      const newFiles = [...selectedFiles];
       
-      try {
-        // 1. Display image preview immediately
-        const imageUrl = URL.createObjectURL(file);
-        setSelectedImage(imageUrl);
-        setSelectedFile(file);
-
-        // 2. Get AI description
-        const formData = new FormData();
-        formData.append('file', file);
-        const response = await fetch('/api/upload-image', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) throw new Error('Failed to analyze image');
-        const data = await response.json();
-        setAiResponse(data);
-
-        // 3. Automatically play description
-        await playDescription(data.description + '. ' + data.remarks);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to process image');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
-
-  const handleTranscriptionComplete = async (transcribedText: string) => {
-    setTranscription(transcribedText);
-    // 4. Save everything to Airtable
-    await saveToAirtable();
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus' // Specify codec
-      });
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
+      // Process each file (up to 3 total)
+      for (let i = 0; i < files.length; i++) {
+        if (newFiles.length >= 3) {
+          setError("Maximum of 3 images allowed");
+          break;
         }
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        setRecordedAudio(audioUrl);
         
-        // Convert to mp3 before transcribing
-        const formData = new FormData();
-        formData.append('audio', audioBlob, 'recording.webm');
+        const file = files[i];
+        const imageUrl = URL.createObjectURL(file);
         
-        // Transcribe the audio
-        await transcribeAudio(formData);
-        
-        // Stop all tracks on the stream
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
+        newImageUrls.push(imageUrl);
+        newFiles.push(file);
+      }
+      
+      setSelectedImages(newImageUrls);
+      setSelectedFiles(newFiles);
+      
+      // If this is the first image, get AI description for it
+      if (selectedFiles.length === 0 && newFiles.length > 0) {
+        await processImageWithRetry(newFiles[0]);
+      }
     } catch (err) {
-      console.error('Failed to start recording:', err);
-      setError('Failed to access microphone');
+      setError(err instanceof Error ? err.message : 'Failed to process image');
+    } finally {
+      setIsLoading(false);
+      setShowUploadOptions(false); // Hide options after upload
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  const transcribeAudio = async (formData: FormData) => {
+  // New function to process image with retry logic
+  const processImageWithRetry = async (file: File, retryCount = 0) => {
     try {
-      setError('');
-      const response = await fetch('/api/transcribe', {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('language', language);
+
+      // Set up timeout for fetch - abort after 120 seconds
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+      const response = await fetch('/api/upload-image', {
         method: 'POST',
-        body: formData
+        body: formData,
+        signal: controller.signal
       });
+
+      // Clear the timeout
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to transcribe audio');
+        throw new Error(errorData.error || 'Failed to analyze image');
       }
 
       const data = await response.json();
-      console.log('Transcription received:', data.text);
-      setTranscription(data.text);
+      setAiResponse(data);
 
-      // Save to Airtable only after successful transcription
-      if (selectedImage && aiResponse && data.text) {
-        console.log('Starting Airtable save with transcription:', data.text);
-        await saveToAirtable();
-      } else {
-        console.log('Missing data for Airtable:', { 
-          hasImage: !!selectedImage, 
-          hasAiResponse: !!aiResponse, 
-          hasTranscription: !!data.text 
-        });
-      }
+      // Automatically play description
+      await playDescription(data.description + '. ' + data.remarks);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to transcribe audio';
-      setError(errorMessage);
-      console.error('Transcription error:', err);
+      console.error('Image processing error:', err);
+      
+      // Check if this is a timeout or aborted request
+      if (
+        err instanceof Error && 
+        (err.name === 'AbortError' || 
+         err.message.includes('timeout') || 
+         err.message.includes('taking too long'))
+      ) {
+        if (retryCount < 2) {  // Try up to 3 times total
+          setError(`Image analysis taking longer than expected. Retrying... (${retryCount + 1}/3)`);
+          // Retry with a smaller file if possible (optional)
+          return processImageWithRetry(file, retryCount + 1);
+        } else {
+          setError('The image analysis is taking too long. Please try with a smaller image or try again later.');
+        }
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to process image');
+      }
     }
+  };
+
+  const handleTranscriptionComplete = (transcribedText: string) => {
+    setTranscription(transcribedText);
+    setIsReadyToSubmit(true);
   };
 
   const saveToAirtable = async () => {
@@ -222,11 +172,12 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       setError('');
       setIsLoading(true);
 
-      // First, upload the image and get its URL
-      let imageUrl = null;
-      if (selectedFile) {
+      // First, upload the images and get their URLs
+      const imageUrls: string[] = [];
+      
+      for (const file of selectedFiles) {
         const imageFormData = new FormData();
-        imageFormData.append('file', selectedFile);
+        imageFormData.append('file', file);
         
         console.log('Uploading image...');
         const uploadResponse = await fetch('/api/upload-file', {
@@ -240,37 +191,29 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         }
 
         const uploadData = await uploadResponse.json();
-        imageUrl = uploadData.url;
-        console.log('Image uploaded successfully:', imageUrl);
+        imageUrls.push(uploadData.url);
+        console.log('Image uploaded successfully:', uploadData.url);
       }
 
-      // Then save the record to Airtable with the image URL
-      console.log('Saving to Airtable...', {
-        imageUrl,
-        description: aiResponse?.description,
-        userComment: transcription
-      });
-
+      // Save all data to Airtable
       const response = await fetch('/api/save-record', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          imageUrl: imageUrl,
-          description: aiResponse?.description || '',
-          userComment: transcription || '',
+          imageUrls, // Now an array of URLs
+          description: aiResponse?.description,
+          userComment: transcription,
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.error || 'Failed to save to Airtable');
       }
 
-      setError('');
-      console.log('Successfully saved to Airtable:', data);
+      console.log('Successfully saved to Airtable');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save to Airtable';
       setError(errorMessage);
@@ -280,91 +223,285 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     }
   };
 
+  const handleSaveToAirtable = async () => {
+    try {
+      await saveToAirtable();
+      setIsSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save to database');
+    }
+  };
+
+  const handleAddNew = () => {
+    // Reset all states
+    setSelectedImages([]);
+    setSelectedFiles([]);
+    setAiResponse(null);
+    setError('');
+    setIsPlaying(false);
+    setTranscription('');
+    setIsReadyToSubmit(false);
+    setIsSubmitted(false);
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setSelectedImages(prevImages => {
+      const newImages = [...prevImages];
+      newImages.splice(index, 1);
+      return newImages;
+    });
+    
+    setSelectedFiles(prevFiles => {
+      const newFiles = [...prevFiles];
+      newFiles.splice(index, 1);
+      return newFiles;
+    });
+  };
+
+  const handleUploadOptionClick = () => {
+    setShowUploadOptions(true);
+  };
+
+  const handleTakePhoto = () => {
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
+    }
+  };
+
+  const handleChooseFile = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center space-y-8 relative">
-      {!selectedImage && (
-        <label className="upload-button cursor-pointer">
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleImageUpload}
-            className="hidden"
-          />
-          <span className="flex items-center">
-            <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            Upload Image or Take Photo
-          </span>
-        </label>
-      )}
+    <div className="flex flex-col items-center relative w-full">
+      {/* Hidden inputs for file and camera */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleImageUpload}
+        className="hidden"
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleImageUpload}
+        className="hidden"
+      />
 
-      {selectedImage && (
-        <div className="w-full space-y-6">
-          <div className="relative w-full max-h-[50vh] rounded-lg overflow-hidden shadow-lg">
-            <img 
-              src={selectedImage} 
-              alt="Selected" 
-              className="object-contain w-full h-full"
-            />
-          </div>
-
-          {error && (
-            <div className="p-4 bg-red-50 dark:bg-red-900/50 text-red-600 dark:text-red-200 rounded-lg">
-              {error}
+      {/* Initial state with upload options button or the two-option UI */}
+      {selectedImages.length === 0 && (
+        <div className="flex flex-col items-center justify-center w-full">
+          {!showUploadOptions ? (
+            <button 
+              onClick={handleUploadOptionClick}
+              className="upload-button"
+            >
+              <span className="flex items-center text-base">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {t('uploadButton')}
+              </span>
+            </button>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+              <button 
+                onClick={handleTakePhoto} 
+                className="upload-option-button bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {t('takePhoto')}
+              </button>
+              <button 
+                onClick={handleChooseFile} 
+                className="upload-option-button bg-purple-500 hover:bg-purple-600 text-white"
+              >
+                <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                {t('uploadImage')}
+              </button>
             </div>
           )}
-
-          {aiResponse && (
-            <div className="space-y-6 bg-gray-50 dark:bg-gray-700/50 rounded-xl p-6">
-              <div>
-                <h2 className="text-xl font-semibold mb-2">AI Description</h2>
-                <p className="text-gray-700 dark:text-gray-300">{aiResponse.description}</p>
-              </div>
-
-              <div>
-                <h2 className="text-xl font-semibold mb-2">AI Remarks</h2>
-                <p className="text-gray-600 dark:text-gray-400 italic">{aiResponse.remarks}</p>
-              </div>
-              
-              <div className="pt-4">
-                {isPlaying ? (
-                  <div className="text-blue-500 flex items-center">
-                    <span className="loader mr-2"></span>
-                    Playing audio description...
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => playDescription(aiResponse.description + '. ' + aiResponse.remarks)}
-                    className="play-button"
-                  >
-                    <span className="flex items-center">
-                      <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" />
-                      </svg>
-                      Play Description
-                    </span>
-                  </button>
-                )}
-              </div>
-
-              <div className="pt-6 border-t">
-                <h2 className="text-xl font-semibold mb-4">Record Your Response</h2>
-                <AudioRecorder onTranscriptionComplete={handleTranscriptionComplete} />
-                
-                {transcription && (
-                  <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
-                    <h3 className="font-semibold mb-2">Your Transcribed Comment:</h3>
-                    <p className="italic text-gray-600 dark:text-gray-400">{transcription}</p>
-                  </div>
-                )}
-              </div>
+          
+          {selectedImages.length < 3 && selectedImages.length > 0 && (
+            <div className="mt-4">
+              <button 
+                onClick={handleUploadOptionClick}
+                className="text-blue-500 hover:text-blue-700 font-medium"
+              >
+                {t('addAnother')} ({3 - selectedImages.length} {t('remaining')})
+              </button>
             </div>
           )}
         </div>
       )}
+
+      {selectedImages.length > 0 && (
+        <div className="w-full">
+          <div className="grid-layout">
+            {/* Left column - Images and Play button */}
+            <div className="flex flex-col space-y-4">
+              <div className="images-container">
+                {selectedImages.map((image, index) => (
+                  <div key={index} className="relative rounded-lg overflow-hidden mb-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                    <img 
+                      src={image} 
+                      alt={`Selected ${index + 1}`}
+                      className="mx-auto" /* Center image */
+                    />
+                    <button
+                      className="absolute top-2 right-2 bg-red-500 rounded-full p-1 text-white"
+                      onClick={() => handleRemoveImage(index)}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                
+                {selectedImages.length < 3 && (
+                  <button 
+                    onClick={handleUploadOptionClick}
+                    className="mt-4 text-blue-500 hover:text-blue-700 font-medium"
+                  >
+                    {t('addAnother')} ({3 - selectedImages.length} {t('remaining')})
+                  </button>
+                )}
+              </div>
+
+              {/* Play button below images */}
+              {aiResponse && (
+                <div className="card">
+                  {isPlaying ? (
+                    <div className="text-blue-500 flex items-center justify-center text-lg">
+                      <span className="loader mr-3"></span>
+                      {t('audioPlaying')}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => playDescription(aiResponse.description + '. ' + aiResponse.remarks)}
+                      className="play-button w-full"
+                    >
+                      <span className="flex items-center justify-center">
+                        {/* Play icon */}
+                        <svg 
+                          className="w-5 h-5 mr-2" 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            strokeWidth={2} 
+                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                          />
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            strokeWidth={2} 
+                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        {t('description')}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Right column - Content */}
+            <div className="content-container">
+              {aiResponse && (
+                <div className="card">
+                  <div className="text-container">
+                    <div>
+                      <div className="description-text text-gray-700 dark:text-gray-300">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {aiResponse.description}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-6">{t('aiRemarks')}</h2>
+                      <div className="description-text text-gray-600 dark:text-gray-400 italic">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {aiResponse.remarks}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Recording Section - Simplified */}
+              <div className="card">
+                <div className="flex justify-center">
+                  <AudioRecorder onTranscriptionComplete={handleTranscriptionComplete} />
+                </div>
+                
+                {transcription && (
+                  <div className="mt-6 p-6 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <p className="description-text italic text-gray-600 dark:text-gray-400">
+                      {transcription}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit and Success States */}
+              <div className="card">
+                {isReadyToSubmit && !isSubmitted && (
+                  <button 
+                    onClick={handleSaveToAirtable} 
+                    className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-5 px-10 
+                      rounded-xl text-xl shadow-lg transform hover:scale-105 transition-transform"
+                  >
+                    {t('saveToDatabase')}
+                  </button>
+                )}
+
+                {isSubmitted && (
+                  <div className="text-center">
+                    <div className="text-green-500 text-xl mb-6">{t('successfullySaved')}</div>
+                    <button 
+                      onClick={handleAddNew} 
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-5 px-10 
+                        rounded-xl text-xl shadow-lg transform hover:scale-105 transition-transform"
+                    >
+                      {t('addNewImage')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="fixed bottom-4 left-4 right-4 p-6 bg-red-50 dark:bg-red-900/50 
+          text-red-600 dark:text-red-200 rounded-xl text-lg shadow-lg max-w-2xl mx-auto">
+          {error}
+        </div>
+      )}
     </div>
   );
-} 
+}
