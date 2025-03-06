@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 import { checkAuth } from '@/utils/auth';
 
@@ -9,7 +9,11 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-export async function POST(request: Request) {
+// Configure route options for handling larger files
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // 1 minute
+
+export async function POST(request: NextRequest) {
   // Check authentication first
   const authError = await checkAuth(request as any);
   if (authError) {

@@ -29,7 +29,8 @@ export default function Home() {
       {/* NavBar at the top */}
       <NavBar />
       
-      <div className="w-full p-6">
+      {/* Added top padding for fixed navbar */}
+      <div className="w-full p-6 pt-20">
         {/* Language Selector in top-right corner */}
         <div className="w-full max-w-[2000px] flex justify-end mb-4">
           <LanguageSelector />
@@ -40,7 +41,7 @@ export default function Home() {
           <div className="flex flex-col items-center text-center">
             <div className="mb-6 w-64 h-64 relative">
               <Image 
-                src="/aa_logo.svg" 
+                src="/aa_logo.png" 
                 alt="Antiques Appraisal Logo" 
                 fill
                 priority

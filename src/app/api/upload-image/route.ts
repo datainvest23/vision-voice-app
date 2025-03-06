@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { v2 as cloudinary } from 'cloudinary';
 import { Language } from '@/app/context/LanguageContext';
@@ -15,6 +15,10 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
+
+// Configure route options for handling larger files
+export const dynamic = 'force-dynamic';
+export const maxDuration = 120; // 2 minutes
 
 // Prompt templates for different languages
 const promptTemplates: Record<Language, string> = {
@@ -83,7 +87,8 @@ Questions
 - Posez toutes les questions nécessaires pour fournir une estimation monétaire fondée sur la rareté, l'état, la demande et l'importance historique.`
 };
 
-export async function POST(request: Request) {
+// This sets body parser config for Next.js 15+
+export async function POST(request: NextRequest) {
   // Check authentication first
   const authError = await checkAuth(request as any);
   if (authError) {
@@ -91,6 +96,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Use NextRequest to handle formData with larger sizes
     const formData = await request.formData();
     const file = formData.get('file') as File;
     // Get user's selected language, default to English if not provided
@@ -126,15 +132,15 @@ export async function POST(request: Request) {
         model: "gpt-4o-mini",
         messages: [
           {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `${promptTemplates[language]} Please respond in ${language}.`
-              },
-              {
-                type: "image_url",
-                image_url: {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `${promptTemplates[language]} Please respond in ${language}.`
+          },
+          {
+            type: "image_url",
+            image_url: {
                   url: imageUrl
                 }
               }

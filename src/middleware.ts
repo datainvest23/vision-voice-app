@@ -56,6 +56,16 @@ export async function middleware(request: NextRequest) {
 
   const { data: { session } } = await supabase.auth.getSession()
 
+  // If the request is for a static asset, allow access regardless of authentication
+  const isStaticAsset = request.nextUrl.pathname.startsWith('/_next') || 
+                       request.nextUrl.pathname.includes('.') || 
+                       request.nextUrl.pathname.startsWith('/aa_logo.svg') ||
+                       request.nextUrl.pathname.startsWith('/aa_logo.png');
+
+  if (isStaticAsset) {
+    return response;
+  }
+
   // If the user is not signed in and the current path is not /login,
   // redirect the user to /login
   if (!session && request.nextUrl.pathname !== '/login') {
@@ -72,6 +82,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Define which paths this middleware should run on
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/auth).*)'],
+  // Define which paths this middleware should run on, excluding static assets
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/auth|.*\\.svg|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.gif).*)'],
 } 

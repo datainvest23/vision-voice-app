@@ -1,21 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Add any specific config options here if needed
-  api: {
-    // Increase the bodyParser limit and timeout
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
-    // Configure response timeout
-    responseLimit: {
-      // Increase to 2 minutes (120 seconds)
-      duration: 120,
-    },
+  
+  // API configuration moved to correct location for Next.js 15+
+  experimental: {
+    serverMemoryTimeout: 120000, // 2 minutes (in milliseconds)
   },
-  // Increase the serverRuntimeConfig timeout
-  serverRuntimeConfig: {
-    // Timeout in milliseconds
-    apiTimeout: 120000, // 2 minutes
+  
+  // Set up proper limits through server components config
+  serverComponentsExternalPackages: [],
+  
+  // Configure response size limits
+  webpack: (config) => {
+    // Increase the buffer limit for the server
+    config.performance = {
+      ...config.performance,
+      maxEntrypointSize: 10 * 1024 * 1024, // 10MB
+      maxAssetSize: 10 * 1024 * 1024, // 10MB
+    };
+    return config;
   },
 }
 

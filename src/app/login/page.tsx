@@ -44,24 +44,22 @@ export default function Login() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
         <div className="flex flex-col items-center text-center">
-          {/* Logo */}
-          <div className="mb-6 w-32 h-32 relative">
+          {/* Logo - made larger */}
+          <div className="mb-6 w-48 h-48 relative">
             <Image 
-              src="/aa_logo.svg" 
+              src="/aa_logo.png" 
               alt="Antiques Appraisal Logo" 
               fill
               priority
               className="object-contain"
             />
           </div>
-          <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white">
-            {isSignUp ? 'Create Account' : 'Sign In'}
-          </h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            {isSignUp 
-              ? 'Create an account to access Antiques Appraisal' 
-              : 'Sign in to your Antiques Appraisal account'}
-          </p>
+          {/* Only show description text for signup */}
+          {isSignUp && (
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              Create an account to access Antiques Appraisal
+            </p>
+          )}
         </div>
 
         {error && (

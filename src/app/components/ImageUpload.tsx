@@ -23,6 +23,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const [error, setError] = useState<string>('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [showUploadOptions, setShowUploadOptions] = useState(false);
+  const [compressionStatus, setCompressionStatus] = useState<string>('');
   
   // Voice recording state
   const [transcription, setTranscription] = useState<string>('');
@@ -35,6 +36,83 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   
   // Get translation function
   const { t, language } = useLanguage();
+
+  // Image compression function
+  const compressImage = async (file: File, quality = 0.7): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Calculate the new dimensions to maintain aspect ratio
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height = Math.round(height * (MAX_WIDTH / width));
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width = Math.round(width * (MAX_HEIGHT / height));
+              height = MAX_HEIGHT;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Convert to JPEG with quality setting (quality parameter)
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                reject(new Error('Canvas to Blob conversion failed'));
+                return;
+              }
+              
+              // Create a new filename that indicates this file has been compressed
+              const originalName = file.name.split('.')[0];
+              const qualityStr = Math.round(quality * 100);
+              const newFileName = `compressed_${originalName}_q${qualityStr}_${Date.now()}.jpg`;
+              
+              // Create a new file from the blob
+              const compressedFile = new File([blob], newFileName, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              
+              resolve(compressedFile);
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = () => {
+          reject(new Error('Error loading image'));
+        };
+      };
+      reader.onerror = () => {
+        reject(new Error('Error reading file'));
+      };
+    });
+  };
+  
+  // Helper function to format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' bytes';
+    else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
 
   const playDescription = async (text: string) => {
     try {
@@ -71,32 +149,48 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-    
+
     setIsLoading(true);
     setError('');
-    
+
     try {
       // Create new arrays with existing images and new images
       const newImageUrls = [...selectedImages];
       const newFiles = [...selectedFiles];
-      
+
       // Process each file (up to 3 total)
       for (let i = 0; i < files.length; i++) {
         if (newFiles.length >= 3) {
           setError("Maximum of 3 images allowed");
           break;
         }
-        
+
         const file = files[i];
-        const imageUrl = URL.createObjectURL(file);
         
+        // Check file size and compress if needed
+        let processedFile = file;
+        if (file.size > 900 * 1024) { // If larger than ~900KB
+          try {
+            setCompressionStatus(`Optimizing image ${i+1}/${files.length}...`);
+            processedFile = await compressImage(file);
+            console.log(`Compressed image from ${Math.round(file.size/1024)}KB to ${Math.round(processedFile.size/1024)}KB`);
+            setCompressionStatus('');
+          } catch (compressionError) {
+            console.error('Image compression error:', compressionError);
+            setCompressionStatus('');
+            // Continue with original file if compression fails
+          }
+        }
+        
+        const imageUrl = URL.createObjectURL(processedFile);
+
         newImageUrls.push(imageUrl);
-        newFiles.push(file);
+        newFiles.push(processedFile);
       }
-      
+
       setSelectedImages(newImageUrls);
       setSelectedFiles(newFiles);
-      
+
       // If this is the first image, get AI description for it
       if (selectedFiles.length === 0 && newFiles.length > 0) {
         await processImageWithRetry(newFiles[0]);
@@ -106,6 +200,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     } finally {
       setIsLoading(false);
       setShowUploadOptions(false); // Hide options after upload
+      setCompressionStatus('');
     }
   };
 
@@ -113,7 +208,37 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const processImageWithRetry = async (file: File, retryCount = 0) => {
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      
+      // Determine compression quality based on file size
+      let compressionQuality = 0.7; // Default quality
+      
+      if (file.size > 5 * 1024 * 1024) { // > 5MB
+        compressionQuality = 0.5;
+      } else if (file.size > 2 * 1024 * 1024) { // > 2MB
+        compressionQuality = 0.6;
+      }
+      
+      // Adjust quality based on retry count - more aggressive compression for retries
+      if (retryCount > 0) {
+        compressionQuality = Math.max(0.3, compressionQuality - (retryCount * 0.1));
+      }
+      
+      // Compress image before sending if it's too large
+      let processedFile = file;
+      if (file.size > 900 * 1024) { // If larger than ~900KB
+        try {
+          setCompressionStatus('Optimizing image for AI analysis...');
+          processedFile = await compressImage(file, compressionQuality);
+          console.log(`Compressed image for upload from ${Math.round(file.size/1024)}KB to ${Math.round(processedFile.size/1024)}KB (quality: ${compressionQuality})`);
+          setCompressionStatus('');
+        } catch (compressionError) {
+          console.error('Image compression error during upload:', compressionError);
+          setCompressionStatus('');
+          // Continue with original file if compression fails
+        }
+      }
+      
+      formData.append('file', processedFile);
       formData.append('language', language);
 
       // Set up timeout for fetch - abort after 120 seconds
@@ -131,6 +256,30 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Check if the error is related to file size
+        if (errorData.error?.includes('Body exceeded 1 MB limit') || 
+            errorData.error?.includes('limit') || 
+            errorData.error?.includes('too large')) {
+          
+          // If we've already tried aggressive compression or this is a retry
+          if (retryCount >= 2 || compressionQuality <= 0.4) {
+            throw new Error('Image is still too large after compression. Please try a smaller image.');
+          } else {
+            // Try more aggressive compression and retry
+            try {
+              // Use a more aggressive compression quality
+              const moreCompressedFile = await compressImage(file, Math.max(0.3, compressionQuality - 0.2));
+              
+              console.log(`Further compressed from ${Math.round(processedFile.size/1024)}KB to ${Math.round(moreCompressedFile.size/1024)}KB with higher compression`);
+              return processImageWithRetry(moreCompressedFile, retryCount + 1);
+            } catch (err) {
+              // If additional compression fails, just report the original error
+              throw new Error('Failed to compress image sufficiently. Please try a smaller image.');
+            }
+          }
+        }
+        
         throw new Error(errorData.error || 'Failed to analyze image');
       }
 
@@ -141,21 +290,35 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       await playDescription(data.description + '. ' + data.remarks);
     } catch (err) {
       console.error('Image processing error:', err);
-      
+
       // Check if this is a timeout or aborted request
       if (
-        err instanceof Error && 
-        (err.name === 'AbortError' || 
-         err.message.includes('timeout') || 
+        err instanceof Error &&
+        (err.name === 'AbortError' ||
+         err.message.includes('timeout') ||
          err.message.includes('taking too long'))
       ) {
         if (retryCount < 2) {  // Try up to 3 times total
           setError(`Image analysis taking longer than expected. Retrying... (${retryCount + 1}/3)`);
-          // Retry with a smaller file if possible (optional)
-          return processImageWithRetry(file, retryCount + 1);
+          // Retry with a smaller file if possible
+          try {
+            // Use more aggressive compression for retries
+            const compressionQuality = Math.max(0.4, 0.7 - (retryCount * 0.15));
+            const compressedFile = await compressImage(file, compressionQuality);
+            return processImageWithRetry(compressedFile, retryCount + 1);
+          } catch (compressionError) {
+            // If compression fails, retry with original file
+            return processImageWithRetry(file, retryCount + 1);
+          }
         } else {
           setError('The image analysis is taking too long. Please try with a smaller image or try again later.');
         }
+      } else if (err instanceof Error && (
+          err.message.includes('Body exceeded 1 MB limit') || 
+          err.message.includes('too large') ||
+          err.message.includes('still too large')
+        )) {
+        setError('The image is too large. Please try again with a smaller image or lower resolution photo.');
       } else {
         setError(err instanceof Error ? err.message : 'Failed to process image');
       }
@@ -174,11 +337,29 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 
       // First, upload the images and get their URLs
       const imageUrls: string[] = [];
-      
-      for (const file of selectedFiles) {
-        const imageFormData = new FormData();
-        imageFormData.append('file', file);
+
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
         
+        // Compress image if needed before uploading to database
+        let fileToUpload = file;
+        
+        // If file is larger than 900KB and not already a compressed JPEG from our earlier compression
+        if (file.size > 900 * 1024 && !file.name.includes('compressed_')) {
+          try {
+            setCompressionStatus(`Optimizing image ${i+1}/${selectedFiles.length} for database...`);
+            fileToUpload = await compressImage(file);
+            console.log(`Compressed image for database upload from ${Math.round(file.size/1024)}KB to ${Math.round(fileToUpload.size/1024)}KB`);
+          } catch (compressionError) {
+            console.error('Image compression error for database upload:', compressionError);
+            // Continue with original file if compression fails
+          }
+        }
+        
+        setCompressionStatus(`Uploading image ${i+1}/${selectedFiles.length} to database...`);
+        const imageFormData = new FormData();
+        imageFormData.append('file', fileToUpload);
+
         console.log('Uploading image...');
         const uploadResponse = await fetch('/api/upload-file', {
           method: 'POST',
@@ -358,7 +539,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
               <div className="images-container">
                 {selectedImages.map((image, index) => (
                   <div key={index} className="relative rounded-lg overflow-hidden mb-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                    <img 
+                    <img
                       src={image} 
                       alt={`Selected ${index + 1}`}
                       className="mx-auto" /* Center image */
@@ -371,6 +552,20 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
+                    {selectedFiles[index] && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1">
+                        {selectedFiles[index].name.includes('compressed_') ? (
+                          <span className="flex items-center">
+                            <svg className="w-3 h-3 mr-1 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Compressed: {formatFileSize(selectedFiles[index].size)}
+                          </span>
+                        ) : (
+                          <span>{formatFileSize(selectedFiles[index].size)}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
                 
