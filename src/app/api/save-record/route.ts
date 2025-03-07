@@ -7,11 +7,12 @@ interface Attachment {
   url: string;
 }
 
-// Removed the extension of Airtable.FieldSet. This was causing the problem.
-interface Fields {
+// Extend Airtable.FieldSet to include your specific fields
+interface Fields extends Airtable.FieldSet {
   Image_Description: string;
   Audio_Note?: string;
   Image?: Attachment[];
+  user_email?: string; // Added user_email field
 }
 
 interface AirtableError extends Error {
@@ -29,19 +30,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { imageUrls, description, userComment } = await request.json(); // Changed imageUrl to imageUrls
+    const { imageUrls, description, userComment, userEmail } = await request.json(); // Added userEmail
 
     if (!description) {
       throw new Error('Description is required');
     }
 
-    console.log('Creating record with:', { imageUrls, description, userComment }); // Changed imageUrl to imageUrls
+    console.log('Creating record with:', { imageUrls, description, userComment, userEmail });
 
     // Create record with proper typing
     const record = await base<Fields>('Table 1').create({
       Image_Description: description,
       Audio_Note: userComment || '',
-      Image: imageUrls ? imageUrls.map((url: string) => ({ url })) : [] // Use imageUrls and map
+      Image: imageUrls ? imageUrls.map((url: string) => ({ url })) : [], // Use imageUrls and map
+      user_email: userEmail || '' // Add user_email to the record
     });
 
     console.log('Airtable response:', record);
