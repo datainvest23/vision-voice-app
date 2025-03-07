@@ -19,7 +19,7 @@ cloudinary.config({
 
 // Configure route options for handling larger files
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120; // 2 minutes
+export const maxDuration = 60; // Maximum allowed for hobby plan
 
 // Define the expected Cloudinary result type (reuse from upload-file)
 interface CloudinaryUploadResult {
