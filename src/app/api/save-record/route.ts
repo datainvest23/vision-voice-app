@@ -6,11 +6,11 @@ interface Attachment {
   url: string;
 }
 
-// Extend Airtable.FieldSet to satisfy the constraint.
+// Extend Airtable.FieldSet and make Image a readonly array
 interface Fields extends Airtable.FieldSet {
   Image_Description: string;
   Audio_Note?: string;
-  Image?: Attachment[];
+  Image?: readonly Attachment[];
 }
 
 interface AirtableError extends Error {
@@ -20,7 +20,7 @@ interface AirtableError extends Error {
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID!);
 
 export async function POST(request: Request) {
-  // Check authentication first. Note: checkAuth expects no arguments.
+  // Check authentication first (checkAuth expects no parameters)
   const authError = await checkAuth();
   if (authError) {
     return authError;
