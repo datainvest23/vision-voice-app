@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import { v2 as cloudinary } from 'cloudinary';
 import { Language } from '@/app/context/LanguageContext';
 import { checkAuth } from '@/utils/auth';
-import { ChatCompletionContentPart } from 'openai/resources/chat/completions';
+import { MessageContentPartParam } from 'openai/resources/beta/threads/messages';
 
 // Configure OpenAI and Cloudinary
 const openai = new OpenAI({
@@ -27,6 +27,12 @@ interface CloudinaryUploadResult {
   secure_url: string;
   // ... other properties ...
 }
+
+// Define types for assistant message content
+type MessageContentParam = MessageContentPartParam | {
+  type: "image_url";
+  image_url: { url: string };
+};
 
 // Prompt templates for different languages
 const promptTemplates: Record<Language, string> = {
@@ -150,71 +156,132 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      // Create message content array with proper typing
-      const messageContent: ChatCompletionContentPart[] = [];
+      // Step 1: Create a Thread
+      console.log("Creating thread for assistant...");
+      const thread = await openai.beta.threads.create();
+      
+      // Step 2: Add a message with instructions and images to the Thread
+      // Prepare message context and intro - mentions we have multiple images if applicable
+      const messageText = `${promptTemplates[language]} Please respond in ${language}. ${
+        imageUrls.length > 1 ? `I'm providing ${imageUrls.length} images of the same item from different angles.` : ''
+      }`;
+      
+      // Create message content array with text and images
+      const messageContent: MessageContentParam[] = [];
       
       // Add text prompt
       messageContent.push({
         type: "text",
-        text: `${promptTemplates[language]} Please respond in ${language}. ${imageUrls.length > 1 ? `I'm providing ${imageUrls.length} images of the same item from different angles.` : ''}`
+        text: messageText
       });
       
-      // Add image URLs
-      imageUrls.forEach(url => {
+      // Add image URLs to the message content
+      for (const url of imageUrls) {
         messageContent.push({
           type: "image_url",
           image_url: { url }
         });
+      }
+      
+      console.log(`Adding message with ${imageUrls.length} image(s) to thread ${thread.id}...`);
+      await openai.beta.threads.messages.create(thread.id, {
+        role: "user",
+        content: messageContent as any // Type assertion needed due to OpenAI SDK typing limitations
       });
       
-      // Call OpenAI Vision API with all image URLs
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: messageContent
-          }
-        ],
-        max_tokens: 1500
+      // Step 3: Run the Assistant on the Thread (without streaming)
+      console.log(`Running assistant ${process.env.OPENAI_ASSISTANT_ID} on thread...`);
+      const run = await openai.beta.threads.runs.create(thread.id, {
+        assistant_id: process.env.OPENAI_ASSISTANT_ID!,
+        model: "gpt-4o-mini", // Explicitly use gpt-4o-mini as requested
+        // Note: streaming is handled differently, see below
       });
-
-      // Extract the content from the response
-      const content = response.choices[0]?.message?.content || '';
-
-      // Process the response to extract structured information
-      const sections = content.split(/\n\n(?=[A-Za-zÀ-ÖØ-öø-ÿ])/);
-      const description = sections[0] || content;
-      const remarks = sections.length > 1
-        ? sections.slice(1).join('\n\n')
-        : "What do you think about this image?";
-
-      return NextResponse.json({ description, remarks });
-
-    } catch (openaiError: unknown) {
-      console.error('OpenAI API Error:', openaiError);
-      let errorMessage = 'AI Service Error';
-      if (openaiError instanceof Error) { // Check if it's an Error object
-        errorMessage = openaiError.message;
-        if (openaiError.name === 'TimeoutError' || openaiError.message.includes('timeout')) {
-          return NextResponse.json(
-            { error: 'The image analysis is taking too long. Please try with a smaller image or try again later.' },
-            { status: 504 }
-          );
+      
+      // Step 4: Wait for the run to complete (poll)
+      console.log(`Waiting for assistant run ${run.id} to complete...`);
+      let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+      
+      // Poll for completion with a timeout (45 seconds max to stay under 60s limit)
+      const startTime = Date.now();
+      const timeout = 45000; // 45 seconds
+      
+      while (
+        !['completed', 'failed', 'cancelled', 'expired'].includes(runStatus.status) &&
+        Date.now() - startTime < timeout
+      ) {
+        // Wait a bit before checking again
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check status again
+        runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+        
+        // Handle failures
+        if (runStatus.status === 'failed' || runStatus.status === 'cancelled' || runStatus.status === 'expired') {
+          console.error(`Assistant run failed with status: ${runStatus.status}`);
+          console.error(`Last error: ${JSON.stringify(runStatus.last_error)}`);
+          throw new Error(`Assistant run failed: ${runStatus.last_error?.message || `Status: ${runStatus.status}`}`);
         }
       }
+      
+      // If we timed out or the run is still in progress
+      if (runStatus.status !== 'completed') {
+        console.warn(`Assistant run timed out after ${Date.now() - startTime}ms with status: ${runStatus.status}`);
+        return NextResponse.json(
+          { error: 'Assistant processing timed out. Please try with fewer or smaller images.' },
+          { status: 504 }
+        );
+      }
+      
+      // Step 5: Retrieve the Assistant's response
+      console.log(`Assistant run completed. Retrieving messages...`);
+      const messages = await openai.beta.threads.messages.list(thread.id, {
+        order: "desc", // Get newest messages first
+        limit: 1 // We only need the latest message
+      });
+      
+      // Get the latest message from the assistant (should be the first one in the list with role=assistant)
+      const assistantMessage = messages.data.find(msg => msg.role === 'assistant');
+      
+      if (!assistantMessage) {
+        throw new Error('No response from assistant');
+      }
+      
+      // Extract the text content from the message
+      let responseText = '';
+      for (const item of assistantMessage.content) {
+        if (item.type === 'text') {
+          responseText += item.text.value;
+        }
+      }
+      
+      // Process the response to extract structured information
+      const sections = responseText.split(/\n\n(?=[A-Za-zÀ-ÖØ-öø-ÿ])/);
+      const description = sections[0] || responseText;
+      const remarks = sections.length > 1
+        ? sections.slice(1).join('\n\n')
+        : "What do you think about this item?";
+      
+      console.log(`Successfully processed analysis with assistant`);
+      return NextResponse.json({ description, remarks });
+      
+    } catch (assistantError: unknown) {
+      console.error('OpenAI Assistant API Error:', assistantError);
+      let errorMessage = 'AI Assistant Error';
+      if (assistantError instanceof Error) {
+        errorMessage = assistantError.message;
+        console.error('Error details:', errorMessage);
+      }
       return NextResponse.json(
-        { error: `AI Service Error: ${errorMessage}` },
+        { error: `AI Assistant Error: ${errorMessage}` },
         { status: 500 }
       );
     }
-
   } catch (error: unknown) {
     console.error('Request processing error:', error);
     let errorMessage = 'Upload Error';
     if (error instanceof Error) {
       errorMessage = error.message;
-      if (error.name === 'TimeoutError' || error.message.includes('timeout')) {
+      if (error.name === 'TimeoutError' || errorMessage.includes('timeout')) {
         return NextResponse.json(
           { error: 'Request timed out. Please try with a smaller image or try again later.' },
           { status: 504 }
