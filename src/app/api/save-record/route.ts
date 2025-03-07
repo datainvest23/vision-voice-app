@@ -2,23 +2,21 @@ import { NextResponse } from 'next/server';
 import Airtable from 'airtable';
 import { checkAuth } from '@/utils/auth';
 
-// Define types for Airtable
 interface Attachment {
   url: string;
 }
 
-interface Fields {
+// Extend Airtable.FieldSet to satisfy the constraint.
+interface Fields extends Airtable.FieldSet {
   Image_Description: string;
   Audio_Note?: string;
   Image?: Attachment[];
 }
 
-// Add this interface for the error
 interface AirtableError extends Error {
   statusCode?: number;
 }
 
-// Initialize Airtable base using environment variables
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID!);
 
 export async function POST(request: Request) {
@@ -58,7 +56,6 @@ export async function POST(request: Request) {
     let status = 500;
     if (error instanceof Error) {
       errorMessage = error.message;
-      // If the error contains a statusCode property, use it
       const anyError = error as AirtableError;
       if (anyError.statusCode) {
         status = anyError.statusCode;
