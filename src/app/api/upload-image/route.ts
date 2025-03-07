@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { v2 as cloudinary } from 'cloudinary';
 import { Language } from '@/app/context/LanguageContext';
 import { checkAuth } from '@/utils/auth';
+import { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 
 // Configure OpenAI and Cloudinary
 const openai = new OpenAI({
@@ -149,17 +150,18 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      // Prepare content array for OpenAI with text and all image URLs
-      const contentArray = [
-        {
-          type: "text",
-          text: `${promptTemplates[language]} Please respond in ${language}. ${imageUrls.length > 1 ? `I'm providing ${imageUrls.length} images of the same item from different angles.` : ''}`
-        }
-      ];
+      // Create message content array with proper typing
+      const messageContent: ChatCompletionContentPart[] = [];
       
-      // Add all image URLs to the content array
+      // Add text prompt
+      messageContent.push({
+        type: "text",
+        text: `${promptTemplates[language]} Please respond in ${language}. ${imageUrls.length > 1 ? `I'm providing ${imageUrls.length} images of the same item from different angles.` : ''}`
+      });
+      
+      // Add image URLs
       imageUrls.forEach(url => {
-        contentArray.push({
+        messageContent.push({
           type: "image_url",
           image_url: { url }
         });
@@ -171,7 +173,7 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: "user",
-            content: contentArray
+            content: messageContent
           }
         ],
         max_tokens: 1500
