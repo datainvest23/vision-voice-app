@@ -245,8 +245,10 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       setSelectedImages(newImageUrls);
       setSelectedFiles(newFiles);
       
-      // If this is the first image, get AI description for it
-      if (selectedFiles.length === 0 && newFiles.length > 0) {
+      // Process images with AI after adding new ones
+      // Always process all available images to get a comprehensive analysis
+      if (newFiles.length > 0) {
+        // Pass the first file as a parameter, but the function will use all files
         await processImageWithAPI(newFiles[0]);
       }
     } catch (err) {
@@ -263,7 +265,18 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       setIsLoading(true);
       
       const formData = new FormData();
-      formData.append('file', file);
+      
+      // Instead of sending a single file, send all selected files
+      if (selectedFiles.length > 0) {
+        // Use the existing selectedFiles array which may contain multiple images
+        selectedFiles.forEach(file => {
+          formData.append('files', file);
+        });
+      } else {
+        // Just use the new file if there are no previously selected files
+        formData.append('files', file);
+      }
+      
       formData.append('language', language);
       
       // Set a timeout to handle potential long requests

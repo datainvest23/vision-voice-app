@@ -21,7 +21,7 @@ cloudinary.config({
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Maximum allowed for hobby plan
 
-// Define the expected Cloudinary result type (reuse from upload-file)
+// Define the expected Cloudinary result type
 interface CloudinaryUploadResult {
   secure_url: string;
   // ... other properties ...
@@ -102,51 +102,76 @@ export async function POST(request: NextRequest) {
   try {
     // Handle formData with larger sizes
     const formData = await request.formData();
-    const file = formData.get('file') as File;
+    
+    // Get all files with the 'files' key (for multiple files)
+    const files = formData.getAll('files') as File[];
+    // Also try to get a single file with the 'file' key for backward compatibility
+    const singleFile = formData.get('file') as File | null;
+    
+    // Combine both approaches to handle different client implementations
+    let filesToProcess: File[] = [];
+    if (files && files.length > 0) {
+      filesToProcess = files;
+    } else if (singleFile) {
+      filesToProcess = [singleFile];
+    }
+    
     // Get user's selected language, default to English if not provided
     const language = (formData.get('language') as Language) || 'en';
 
-    if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+    if (filesToProcess.length === 0) {
+      return NextResponse.json({ error: 'No files uploaded' }, { status: 400 });
     }
 
-    // Convert file to buffer for Cloudinary
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    // Upload all images to Cloudinary and get their URLs
+    const imageUrls: string[] = [];
+    
+    for (const file of filesToProcess) {
+      // Convert file to buffer for Cloudinary
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
 
-    // Upload to Cloudinary first
-    const cloudinaryResult = await new Promise<CloudinaryUploadResult>((resolve, reject) => { // Use the interface
-      cloudinary.uploader.upload_stream(
-        {
-          resource_type: 'auto',
-          timeout: 60000 // 60 second timeout for Cloudinary
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result as CloudinaryUploadResult); // Cast
-        }
-      ).end(buffer);
-    });
+      // Upload to Cloudinary
+      const cloudinaryResult = await new Promise<CloudinaryUploadResult>((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          {
+            resource_type: 'auto',
+            timeout: 60000 // 60 second timeout for Cloudinary
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result as CloudinaryUploadResult);
+          }
+        ).end(buffer);
+      });
 
-    const imageUrl = cloudinaryResult.secure_url; // No more 'any'
+      imageUrls.push(cloudinaryResult.secure_url);
+    }
 
     try {
-      // Call OpenAI Vision API with the image URL and language-specific prompt
+      // Prepare content array for OpenAI with text and all image URLs
+      const contentArray = [
+        {
+          type: "text",
+          text: `${promptTemplates[language]} Please respond in ${language}. ${imageUrls.length > 1 ? `I'm providing ${imageUrls.length} images of the same item from different angles.` : ''}`
+        }
+      ];
+      
+      // Add all image URLs to the content array
+      imageUrls.forEach(url => {
+        contentArray.push({
+          type: "image_url",
+          image_url: { url }
+        });
+      });
+      
+      // Call OpenAI Vision API with all image URLs
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "user",
-            content: [
-              {
-                type: "text",
-                text: `${promptTemplates[language]} Please respond in ${language}.`
-              },
-              {
-                type: "image_url",
-                image_url: { url: imageUrl }
-              }
-            ]
+            content: contentArray
           }
         ],
         max_tokens: 1500
