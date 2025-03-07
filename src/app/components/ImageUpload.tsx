@@ -108,21 +108,71 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     else return (bytes / 1048576).toFixed(1) + ' MB';
   };
 
+  // Helper function to split text into manageable chunks
+  const splitTextIntoChunks = (text: string, maxChars = 1000) => {
+    // If text is short enough, return it as is
+    if (text.length <= maxChars) return [text];
+    
+    const chunks = [];
+    let startIndex = 0;
+    
+    while (startIndex < text.length) {
+      // Find a good breaking point (sentence ending)
+      let endIndex = startIndex + maxChars;
+      if (endIndex >= text.length) {
+        endIndex = text.length;
+      } else {
+        // Try to find a sentence end
+        const possibleBreak = text.substring(startIndex, endIndex).lastIndexOf('.');
+        if (possibleBreak > 0) {
+          endIndex = startIndex + possibleBreak + 1;
+        } else {
+          // If no sentence break, try to find a space
+          const possibleWordBreak = text.substring(startIndex, endIndex).lastIndexOf(' ');
+          if (possibleWordBreak > 0) {
+            endIndex = startIndex + possibleWordBreak + 1;
+          }
+        }
+      }
+      
+      chunks.push(text.substring(startIndex, endIndex));
+      startIndex = endIndex;
+    }
+    
+    return chunks;
+  };
+
   const playDescription = async (text: string) => {
     if (isPlaying) return; // Prevent multiple playbacks
     
     try {
       setIsPlaying(true);
+      
+      // Split text into smaller chunks if it's too long
+      const textChunks = splitTextIntoChunks(text);
+      console.log(`Text split into ${textChunks.length} chunks for TTS processing`);
+      
+      // Process only the first chunk to keep it responsive
+      // We'll add more sophisticated chunk handling in a future update if needed
+      const chunkToProcess = textChunks[0];
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
       const response = await fetch('/api/text-to-speech', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: chunkToProcess }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error('Failed to generate speech');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to generate speech');
       }
 
       const audioBlob = await response.blob();
@@ -134,7 +184,8 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         URL.revokeObjectURL(audioUrl);
       };
       
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
         setIsPlaying(false);
         URL.revokeObjectURL(audioUrl);
         setError('Audio playback failed');
