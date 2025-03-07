@@ -64,12 +64,13 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     console.error('Airtable error:', error);
     let errorMessage = 'Failed to save record';
-    let statusCode = 500;
+    let statusCode = 500; // Default
 
     if (error instanceof Error) {
       errorMessage = error.message;
-      if ((error as AirtableError).statusCode) {
-        statusCode = (error as AirtableError).statusCode;
+      // Correctly handle optional statusCode
+      if ((error as AirtableError).statusCode !== undefined) {
+        statusCode = (error as AirtableError).statusCode!; // Use non-null assertion
       }
     }
 
