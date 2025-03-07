@@ -6,7 +6,7 @@ import { checkAuth } from '@/utils/auth';
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 // Configure route options for handling larger files
@@ -15,15 +15,15 @@ export const maxDuration = 60; // 1 minute
 
 export async function POST(request: NextRequest) {
   // Check authentication first
-  const authError = await checkAuth(request as any);
+  const authError = await checkAuth(request);
   if (authError) {
     return authError;
   }
 
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File;
-    
+    const file = formData.get('file') as File | null;
+
     if (!file) {
       throw new Error('No file uploaded');
     }
@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Upload to Cloudinary
-    const result = await new Promise((resolve, reject) => {
+    // Upload to Cloudinary using a Promise
+    const result = await new Promise<any>((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         { resource_type: 'auto' },
         (error, result) => {
@@ -44,16 +44,20 @@ export async function POST(request: NextRequest) {
     });
 
     // Return the Cloudinary URL
-    return NextResponse.json({ 
-      url: (result as any).secure_url,
-      message: 'File uploaded successfully'
+    return NextResponse.json({
+      url: result?.secure_url,
+      message: 'File uploaded successfully',
     });
-
-  } catch (error) {
+    
+  } catch (error: unknown) {
     console.error('Upload error:', error);
+    let errorMessage = 'Failed to upload file';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
     return NextResponse.json(
-      { error: 'Failed to upload file' },
+      { error: errorMessage },
       { status: 500 }
     );
   }
-} 
+}

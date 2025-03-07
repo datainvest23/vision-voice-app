@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
         get(name: string) {
           return request.cookies.get(name)?.value
         },
-        set(name: string, value: string, options: any) {
+        set(name: string, value: string, options: Record<string, unknown>) {
           request.cookies.set({
             name,
             value,
@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
             ...options,
           })
         },
-        remove(name: string, options: any) {
+        remove(name: string, options: Record<string, unknown>) {
           request.cookies.set({
             name,
             value: '',
@@ -84,4 +84,4 @@ export async function middleware(request: NextRequest) {
 export const config = {
   // Define which paths this middleware should run on, excluding static assets
   matcher: ['/((?!_next/static|_next/image|favicon.ico|api/auth|.*\\.svg|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.gif).*)'],
-} 
+}

@@ -13,7 +13,7 @@ const openai = new OpenAI({
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 // Configure route options for handling larger files
@@ -37,7 +37,6 @@ Recommended Next Steps
 
 Questions
 - Ask any questions needed to provide a reasoned monetary estimate based on rarity, condition, demand, and historical importance.`,
-
   de: `Sie sind "Antiques_Appraisal", ein Experte für die Bewertung antiker Objekte. Ihr Ziel ist es, Bilder (z. B. Gemälde, Zeichnungen, Skulpturen, Artefakte) zu erhalten und dann:
 
 Objektbeschreibung & Beobachtungen
@@ -53,7 +52,6 @@ Empfohlene Nächste Schritte
 
 Fragen
 - Stellen Sie alle nötigen Fragen, um eine fundierte Preisschätzung hinsichtlich Seltenheit, Zustand, Nachfrage und geschichtlichem Wert vorzunehmen.`,
-
   es: `Usted es "Antiques_Appraisal", un experto en la evaluación de artículos antiguos. Su objetivo es recibir imágenes (p. ej., pinturas, dibujos, esculturas, artefactos) y luego:
 
 Descripción y Observaciones
@@ -69,7 +67,6 @@ Próximos Pasos Recomendados
 
 Preguntas
 - Haga las preguntas necesarias para ofrecer una estimación monetaria basada en la rareza, el estado, la demanda y la importancia histórica.`,
-
   fr: `Vous êtes "Antiques_Appraisal", un expert dans l'évaluation d'objets anciens. Votre objectif est de recevoir des images (peintures, dessins, sculptures, artefacts, etc.) puis :
 
 Description & Observations
@@ -89,14 +86,14 @@ Questions
 
 // This sets body parser config for Next.js 15+
 export async function POST(request: NextRequest) {
-  // Check authentication first
-  const authError = await checkAuth(request as any);
+  // Check authentication first without casting to any
+  const authError = await checkAuth(request);
   if (authError) {
     return authError;
   }
 
   try {
-    // Use NextRequest to handle formData with larger sizes
+    // Handle formData with larger sizes
     const formData = await request.formData();
     const file = formData.get('file') as File;
     // Get user's selected language, default to English if not provided
@@ -127,22 +124,20 @@ export async function POST(request: NextRequest) {
     const imageUrl = (cloudinaryResult as any).secure_url;
 
     try {
-      // Use a direct call to the OpenAI Vision API instead of the Assistant API
+      // Call OpenAI Vision API with the image URL and language-specific prompt
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: `${promptTemplates[language]} Please respond in ${language}.`
-          },
-          {
-            type: "image_url",
-            image_url: {
-                  url: imageUrl
-                }
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `${promptTemplates[language]} Please respond in ${language}.`
+              },
+              {
+                type: "image_url",
+                image_url: { url: imageUrl }
               }
             ]
           }
@@ -153,54 +148,48 @@ export async function POST(request: NextRequest) {
       // Extract the content from the response
       const content = response.choices[0]?.message?.content || '';
 
-      // Process the AI response to extract structured information
-      // The first section is typically the Item Description
+      // Process the response to extract structured information
       const sections = content.split(/\n\n(?=[A-Za-zÀ-ÖØ-öø-ÿ])/);
-      
-      // Use the first section as the description (typically Item Description & Observations)
       const description = sections[0] || content;
-      
-      // Combine the rest of the sections for the remarks
       const remarks = sections.length > 1 
         ? sections.slice(1).join('\n\n')
         : "What do you think about this image?";
 
-      return NextResponse.json({
-        description,
-        remarks
-      });
+      return NextResponse.json({ description, remarks });
 
-    } catch (openaiError: any) {
+    } catch (openaiError: unknown) {
       console.error('OpenAI API Error:', openaiError);
-      
-      // Check for timeout errors specifically
-      if (openaiError.name === 'TimeoutError' || openaiError.message?.includes('timeout')) {
-        return NextResponse.json(
-          { error: 'The image analysis is taking too long. Please try with a smaller image or try again later.' },
-          { status: 504 } // Gateway Timeout status
-        );
+      let errorMessage = 'AI Service Error';
+      if (openaiError instanceof Error) {
+        errorMessage = openaiError.message;
+        if (openaiError.name === 'TimeoutError' || openaiError.message.includes('timeout')) {
+          return NextResponse.json(
+            { error: 'The image analysis is taking too long. Please try with a smaller image or try again later.' },
+            { status: 504 }
+          );
+        }
       }
-      
       return NextResponse.json(
-        { error: `AI Service Error: ${openaiError.message}` },
+        { error: `AI Service Error: ${errorMessage}` },
         { status: 500 }
       );
     }
 
-  } catch (error: any) {
-    console.error('Request processing error:', error.message);
-    
-    // Check if this is a timeout error
-    if (error.name === 'TimeoutError' || error.message?.includes('timeout')) {
-      return NextResponse.json(
-        { error: 'Request timed out. Please try with a smaller image or try again later.' },
-        { status: 504 } // Gateway Timeout status
-      );
+  } catch (error: unknown) {
+    console.error('Request processing error:', error);
+    let errorMessage = 'Upload Error';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      if (error.name === 'TimeoutError' || error.message.includes('timeout')) {
+        return NextResponse.json(
+          { error: 'Request timed out. Please try with a smaller image or try again later.' },
+          { status: 504 }
+        );
+      }
     }
-    
     return NextResponse.json(
-      { error: `Upload Error: ${error.message}` },
+      { error: `Upload Error: ${errorMessage}` },
       { status: 500 }
     );
   }
-} 
+}

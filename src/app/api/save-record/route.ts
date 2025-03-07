@@ -13,11 +13,12 @@ interface Fields {
   Image?: Attachment[];
 }
 
+// Initialize Airtable base using environment variables
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID!);
 
 export async function POST(request: Request) {
-  // Check authentication first
-  const authError = await checkAuth(request as any);
+  // Check authentication first (ensure checkAuth accepts Request type)
+  const authError = await checkAuth(request);
   if (authError) {
     return authError;
   }
@@ -40,17 +41,27 @@ export async function POST(request: Request) {
 
     console.log('Airtable response:', record);
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       id: record.id,
       message: 'Record created successfully'
     });
-
-  } catch (error: any) {
+    
+  } catch (error: unknown) {
     console.error('Airtable error:', error);
+    let errorMessage = 'Failed to save record';
+    let status = 500;
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      // If the error contains a statusCode property, use it
+      const anyError = error as any;
+      if (anyError.statusCode) {
+        status = anyError.statusCode;
+      }
+    }
     return NextResponse.json(
-      { error: error.message || 'Failed to save record' },
-      { status: error.statusCode || 500 }
+      { error: errorMessage },
+      { status }
     );
   }
-} 
+}

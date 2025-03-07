@@ -2,14 +2,14 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { Session, User } from '@supabase/supabase-js';
+import { Session, User, AuthError } from '@supabase/supabase-js';
 
 type AuthContextType = {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: any | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -89,4 +89,4 @@ export const AuthProvider = ({
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}; 
+};

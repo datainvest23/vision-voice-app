@@ -457,6 +457,11 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 
   return (
     <div className="flex flex-col items-center relative w-full">
+      {/* Display compression status if any */}
+      {compressionStatus && (
+        <div className="mb-2 text-sm text-gray-500">{compressionStatus}</div>
+      )}
+
       {/* Hidden inputs for file and camera */}
       <input
         ref={fileInputRef}
@@ -539,6 +544,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
               <div className="images-container">
                 {selectedImages.map((image, index) => (
                   <div key={index} className="relative rounded-lg overflow-hidden mb-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={image} 
                       alt={`Selected ${index + 1}`}

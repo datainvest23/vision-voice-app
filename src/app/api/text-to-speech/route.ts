@@ -8,7 +8,7 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   // Check authentication first
-  const authError = await checkAuth(request as any);
+  const authError = await checkAuth(request);
   if (authError) {
     return authError;
   }
@@ -39,12 +39,16 @@ export async function POST(request: Request) {
         'Content-Length': buffer.length.toString(),
       },
     });
-
-  } catch (error: any) {
-    console.error('Text-to-speech error:', error.message);
+    
+  } catch (error: unknown) {
+    console.error('Text-to-speech error:', error);
+    let errorMessage = 'Speech generation error';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
     return NextResponse.json(
-      { error: `Speech generation error: ${error.message}` },
+      { error: `Speech generation error: ${errorMessage}` },
       { status: 500 }
     );
   }
-} 
+}

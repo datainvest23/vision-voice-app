@@ -33,8 +33,12 @@ export default function Login() {
       } else {
         router.push('/');
       }
-    } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'An unexpected error occurred');
+      } else {
+        setError('An unexpected error occurred');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -125,4 +129,4 @@ export default function Login() {
       </div>
     </div>
   );
-} 
+}

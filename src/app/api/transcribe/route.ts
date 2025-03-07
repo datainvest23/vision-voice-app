@@ -7,8 +7,8 @@ const openai = new OpenAI({
 });
 
 export async function POST(request: Request) {
-  // Check authentication first
-  const authError = await checkAuth(request as any);
+  // Check authentication first (ensure checkAuth accepts Request type)
+  const authError = await checkAuth(request);
   if (authError) {
     return authError;
   }
@@ -36,19 +36,27 @@ export async function POST(request: Request) {
       });
 
       return NextResponse.json({ text: transcription.text });
-    } catch (openaiError: any) {
+    } catch (openaiError: unknown) {
       console.error('OpenAI API Error:', openaiError);
+      let openaiErrorMessage = 'OpenAI API Error';
+      if (openaiError instanceof Error) {
+        openaiErrorMessage = openaiError.message;
+      }
       return NextResponse.json(
-        { error: `OpenAI API Error: ${openaiError.message}` },
+        { error: `OpenAI API Error: ${openaiErrorMessage}` },
         { status: 500 }
       );
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Request processing error:', error);
+    let errorMessage = 'Failed to process audio';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
     return NextResponse.json(
-      { error: `Failed to process audio: ${error.message}` },
+      { error: `Failed to process audio: ${errorMessage}` },
       { status: 500 }
     );
   }
-} 
+}
