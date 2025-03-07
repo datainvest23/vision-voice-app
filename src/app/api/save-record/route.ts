@@ -6,11 +6,11 @@ interface Attachment {
   url: string;
 }
 
-// Extend Airtable.FieldSet and make Image a readonly array
-interface Fields extends Airtable.FieldSet {
+// Corrected Fields interface:  No longer extends Airtable.FieldSet
+interface Fields {
   Image_Description: string;
   Audio_Note?: string;
-  Image?: readonly Attachment[];
+  Image?: Attachment[]; // Corrected:  Attachment[], not readonly
 }
 
 interface AirtableError extends Error {
@@ -20,26 +20,28 @@ interface AirtableError extends Error {
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID!);
 
 export async function POST(request: Request) {
-  // Check authentication first (checkAuth expects no parameters)
   const authError = await checkAuth();
   if (authError) {
     return authError;
   }
 
   try {
-    const { imageUrl, description, userComment } = await request.json();
+    // Use imageUrls (plural) to match ImageUpload.tsx
+    const { imageUrls, description, userComment } = await request.json();
 
     if (!description) {
       throw new Error('Description is required');
     }
 
-    console.log('Creating record with:', { imageUrl, description, userComment });
+    console.log('Creating record with:', { imageUrls, description, userComment });
 
-    // Create record with proper typing
+    // Correctly map imageUrls to the Attachment format:
+    const attachments = imageUrls ? imageUrls.map((url: string) => ({ url })) : [];
+
     const record = await base<Fields>('Table 1').create({
       Image_Description: description,
       Audio_Note: userComment || '',
-      Image: imageUrl ? [{ url: imageUrl }] : []
+      Image: attachments, // Pass the correctly formatted attachments
     });
 
     console.log('Airtable response:', record);
