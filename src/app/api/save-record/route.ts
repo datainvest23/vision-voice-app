@@ -11,7 +11,7 @@ interface Attachment {
 interface Fields extends Airtable.FieldSet {
   Image_Description: string;
   Audio_Note?: string;
-  Image?: Attachment[];
+  Image?: Attachment[]; // Use Attachment[] for the Image field
   user_email?: string; // Added user_email field
 }
 
@@ -39,18 +39,22 @@ export async function POST(request: Request) {
     console.log('Creating record with:', { imageUrls, description, userComment, userEmail });
 
     // Create record with proper typing
-    const record = await base<Fields>('Table 1').create({
-      Image_Description: description,
-      Audio_Note: userComment || '',
-      Image: imageUrls ? imageUrls.map((url: string) => ({ url })) : [], // Use imageUrls and map
-      user_email: userEmail || '' // Add user_email to the record
-    });
+    const record = await base<Fields>('Table 1').create([
+      {
+        fields: {
+          Image_Description: description,
+          Audio_Note: userComment || '',
+          Image: imageUrls ? imageUrls.map((url: string) => ({ url })) : [], // Use imageUrls and map
+          user_email: userEmail || '' // Add user_email to the record
+        }
+      }
+    ]);
 
     console.log('Airtable response:', record);
 
     return NextResponse.json({
       success: true,
-      id: record.id,
+      id: record[0].id,
       message: 'Record created successfully'
     });
 
