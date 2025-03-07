@@ -24,7 +24,7 @@ interface CloudinaryUploadResult {
 
 export async function POST(request: NextRequest) {
   // Check authentication first
-  const authError = await checkAuth(request);
+  const authError = await checkAuth();
   if (authError) {
     return authError;
   }
