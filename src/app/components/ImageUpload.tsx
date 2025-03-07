@@ -5,7 +5,7 @@ import { AudioRecorder } from '@/app/components/AudioRecorder';
 import { useLanguage } from '../context/LanguageContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import Image from 'next/image';
+import NextImage from 'next/image';
 
 interface ImageUploadProps {
   setIsLoading: Dispatch<SetStateAction<boolean>>;
@@ -24,89 +24,93 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [compressionStatus, setCompressionStatus] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState(false);
-
+  
+  // Voice recording state
   const [transcription, setTranscription] = useState<string>('');
   const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
+  // Reference to file inputs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-
+  
+  // Get translation function
   const { t, language } = useLanguage();
 
+  // Simplified image compression function
   const compressImage = async (file: File, quality = 0.7): Promise<File> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = (event) => {
-        const img = new Image();
+        // Use HTMLImageElement instead of new Image() to avoid conflicts
+        const img = document.createElement('img');
         img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
 
+          // Resize if image is too large
           const MAX_WIDTH = 1200;
           const MAX_HEIGHT = 1200;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height = Math.round(height * (MAX_WIDTH / width));
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width = Math.round(width * (MAX_HEIGHT / height));
-              height = MAX_HEIGHT;
-            }
+          if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+            const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+            width = width * ratio;
+            height = height * ratio;
           }
 
           canvas.width = width;
           canvas.height = height;
-
           const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-
+          
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+          
+          // Draw image on canvas
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert canvas to Blob with quality setting
           canvas.toBlob(
             (blob) => {
               if (!blob) {
-                reject(new Error('Canvas to Blob conversion failed'));
+                reject(new Error('Failed to compress image'));
                 return;
               }
-
-              const originalName = file.name.split('.')[0];
-              const qualityStr = Math.round(quality * 100);
-              const newFileName = `compressed_${originalName}_q${qualityStr}_${Date.now()}.jpg`;
-
-              const compressedFile = new File([blob], newFileName, {
+              
+              // Create new file from blob
+              const newFile = new File([blob], file.name, {
                 type: 'image/jpeg',
                 lastModified: Date.now(),
               });
-
-              resolve(compressedFile);
+              
+              resolve(newFile);
             },
             'image/jpeg',
             quality
           );
         };
         img.onerror = () => {
-          reject(new Error('Error loading image'));
+          reject(new Error('Failed to load image'));
         };
       };
       reader.onerror = () => {
-        reject(new Error('Error reading file'));
+        reject(new Error('Failed to read file'));
       };
     });
   };
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return bytes + ' bytes';
-    else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024) return bytes + ' B';
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    else return (bytes / 1048576).toFixed(1) + ' MB';
   };
 
   const playDescription = async (text: string) => {
+    if (isPlaying) return; // Prevent multiple playbacks
+    
     try {
       setIsPlaying(true);
       const response = await fetch('/api/text-to-speech', {
@@ -124,14 +128,21 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
-
+      
       audio.onended = () => {
         setIsPlaying(false);
         URL.revokeObjectURL(audioUrl);
       };
+      
+      audio.onerror = () => {
+        setIsPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+        setError('Audio playback failed');
+      };
 
-      audio.play();
-    } catch {
+      await audio.play();
+    } catch (err) {
+      console.error('Speech playback error:', err);
       setError('Failed to play audio description');
       setIsPlaying(false);
     }
@@ -140,47 +151,52 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-
+    
     setIsLoading(true);
     setError('');
     setCompressionStatus('');
-
+    
     try {
+      // Create new arrays with existing images and new images
       const newImageUrls = [...selectedImages];
       const newFiles = [...selectedFiles];
-
+      
+      // Process each file (up to 3 total)
       for (let i = 0; i < files.length; i++) {
         if (newFiles.length >= 3) {
           setError("Maximum of 3 images allowed");
           break;
         }
-
+        
         const file = files[i];
         let processedFile = file;
-
+        
+        // Only compress if file is over 900KB
         if (file.size > 900 * 1024) {
           try {
             setCompressionStatus(`Optimizing image ${i + 1}/${files.length}...`);
             processedFile = await compressImage(file);
-            console.log(`Compressed image from ${Math.round(file.size / 1024)}KB to ${Math.round(processedFile.size / 1024)}KB`);
+            console.log(`Compressed image from ${formatFileSize(file.size)} to ${formatFileSize(processedFile.size)}`);
+          } catch (compressionError) {
+            console.error('Compression error:', compressionError);
+            // Continue with original file if compression fails
+            setError(`Image optimization failed. Using original image (${formatFileSize(file.size)}).`);
+          } finally {
             setCompressionStatus('');
-          } catch {
-            setCompressionStatus(`Failed to optimize image ${i + 1}/${files.length}.`);
-            setError(`Failed to optimize image ${i + 1}.  Using original file.`);
-            // Continue with original file
           }
         }
-
+        
         const imageUrl = URL.createObjectURL(processedFile);
         newImageUrls.push(imageUrl);
         newFiles.push(processedFile);
       }
-
+      
       setSelectedImages(newImageUrls);
       setSelectedFiles(newFiles);
-
+      
+      // If this is the first image, get AI description for it
       if (selectedFiles.length === 0 && newFiles.length > 0) {
-        await processImageWithRetry(newFiles[0]);
+        await processImageWithAPI(newFiles[0]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process image');
@@ -190,110 +206,53 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     }
   };
 
-  const processImageWithRetry = async (file: File, retryCount = 0) => {
-    setIsProcessing(true);
+  // Simplified API processing function
+  const processImageWithAPI = async (file: File) => {
     try {
+      setIsLoading(true);
+      
       const formData = new FormData();
-      let compressionQuality = 0.7;
-
-      if (file.size > 5 * 1024 * 1024) {
-        compressionQuality = 0.5;
-      } else if (file.size > 2 * 1024 * 1024) {
-        compressionQuality = 0.6;
-      }
-
-      if (retryCount > 0) {
-        compressionQuality = Math.max(0.3, compressionQuality - (retryCount * 0.1));
-      }
-
-      let processedFile = file;
-      if (file.size > 900 * 1024) {
-        try {
-          setCompressionStatus('Optimizing image for AI analysis...');
-          processedFile = await compressImage(file, compressionQuality);
-          console.log(`Compressed image for upload from ${Math.round(file.size / 1024)}KB to ${Math.round(processedFile.size / 1024)}KB (quality: ${compressionQuality})`);
-          setCompressionStatus('');
-        } catch (compressionError) {
-          console.error('Image compression error during upload:', compressionError);
-          setCompressionStatus('Failed to optimize image for AI analysis.');
-          setError('Failed to optimize image. Using original file.');
-          // Continue with original file
-        }
-      }
-
-      formData.append('file', processedFile);
+      formData.append('file', file);
       formData.append('language', language);
-
+      
+      // Set a timeout to handle potential long requests
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 1 minute timeout
+      
       const response = await fetch('/api/upload-image', {
         method: 'POST',
         body: formData,
         signal: controller.signal
       });
-
+      
       clearTimeout(timeoutId);
-
+      
       if (!response.ok) {
         const errorData = await response.json();
-
-        if (errorData.error?.includes('Body exceeded 1 MB limit') ||
-          errorData.error?.includes('limit') ||
-          errorData.error?.includes('too large')) {
-
-          if (retryCount >= 2 || compressionQuality <= 0.4) {
-            throw new Error('Image is still too large after compression. Please try a smaller image.');
-          } else {
-            try {
-              const moreCompressedFile = await compressImage(file, Math.max(0.3, compressionQuality - 0.2));
-              console.log(`Further compressed from ${Math.round(processedFile.size / 1024)}KB to ${Math.round(moreCompressedFile.size / 1024)}KB with higher compression`);
-              return processImageWithRetry(moreCompressedFile, retryCount + 1);
-            } catch {
-              throw new Error('Failed to compress image sufficiently. Please try a smaller image.');
-            }
-          }
-        }
-
         throw new Error(errorData.error || 'Failed to analyze image');
       }
-
+      
       const data = await response.json();
       setAiResponse(data);
-      await playDescription(data.description + '. ' + data.remarks);
-
-    } catch (err) {
-      console.error('Image processing error:', err);
-
-      if (
-        err instanceof Error &&
-        (err.name === 'AbortError' ||
-         err.message.includes('timeout') ||
-         err.message.includes('taking too long'))
-      ) {
-        if (retryCount < 2) {
-          setError(`Image analysis taking longer than expected. Retrying... (${retryCount + 1}/3)`);
-          try {
-            const compressionQuality = Math.max(0.4, 0.7 - (retryCount * 0.15));
-            const compressedFile = await compressImage(file, compressionQuality);
-            return processImageWithRetry(compressedFile, retryCount + 1);
-          } catch {
-            return processImageWithRetry(file, retryCount + 1);
-          }
-        } else {
-          setError('The image analysis is taking too long. Please try with a smaller image or try again later.');
+      
+      // Automatically play description
+      playDescription(data.description + '. ' + data.remarks);
+    } catch (error) {
+      console.error('API processing error:', error);
+      let errorMessage = 'Failed to analyze image';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // If it's an abort error from the timeout
+        if (error.name === 'AbortError') {
+          errorMessage = 'Request timed out. Please try again with a smaller image.';
         }
-      } else if (err instanceof Error && (
-          err.message.includes('Body exceeded 1 MB limit') ||
-          err.message.includes('too large') ||
-          err.message.includes('still too large')
-        )) {
-        setError('The image is too large. Please try again with a smaller image or lower resolution photo.');
-      } else {
-        setError(err instanceof Error ? err.message : 'Failed to process image');
       }
+      
+      setError(errorMessage);
     } finally {
-      setIsProcessing(false);
+      setIsLoading(false);
     }
   };
 
@@ -306,54 +265,15 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     try {
       setError('');
       setIsLoading(true);
-      setCompressionStatus('');
 
-      const imageUrls: string[] = [];
-
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
-        let fileToUpload = file;
-
-        if (file.size > 900 * 1024 && !file.name.includes('compressed_')) {
-          try {
-            setCompressionStatus(`Optimizing image ${i + 1}/${selectedFiles.length} for database...`);
-            fileToUpload = await compressImage(file);
-            console.log(`Compressed image for database upload from ${Math.round(file.size / 1024)}KB to ${Math.round(fileToUpload.size / 1024)}KB`);
-            setCompressionStatus('');
-          } catch {
-            console.error('Image compression error for database upload.');
-            setCompressionStatus(`Failed to optimize image ${i + 1}/${selectedFiles.length} for database.`);
-            setError(`Failed to optimize image ${i + 1} for database.  Using original file.`);
-          }
-        }
-
-        setCompressionStatus(`Uploading image ${i + 1}/${selectedFiles.length} to database...`);
-        const imageFormData = new FormData();
-        imageFormData.append('file', fileToUpload);
-
-        console.log('Uploading image...');
-        const uploadResponse = await fetch('/api/upload-file', {
-          method: 'POST',
-          body: imageFormData,
-        });
-
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json();
-          throw new Error(`Failed to upload image: ${errorData.error}`);
-        }
-
-        const uploadData = await uploadResponse.json();
-        imageUrls.push(uploadData.url);
-        console.log('Image uploaded successfully:', uploadData.url);
-      }
-
+      // Save all data to Airtable
       const response = await fetch('/api/save-record', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          imageUrls,
+          images: selectedFiles, // Use the already processed/compressed images
           description: aiResponse?.description,
           userComment: transcription,
         }),
@@ -361,30 +281,25 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Failed to save to Airtable');
+        throw new Error(data.error || 'Failed to save to database');
       }
 
-      console.log('Successfully saved to Airtable');
+      setIsSubmitted(true);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to save to Airtable';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save to database';
       setError(errorMessage);
-      console.error('Airtable save error:', err);
+      console.error('Save error:', err);
     } finally {
       setIsLoading(false);
-      setCompressionStatus('');
     }
   };
 
   const handleSaveToAirtable = async () => {
-    try {
-      await saveToAirtable();
-      setIsSubmitted(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save to database');
-    }
+    await saveToAirtable();
   };
 
   const handleAddNew = () => {
+    // Reset all states
     setSelectedImages([]);
     setSelectedFiles([]);
     setAiResponse(null);
@@ -393,7 +308,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     setTranscription('');
     setIsReadyToSubmit(false);
     setIsSubmitted(false);
-    setCompressionStatus('');
   };
 
   const handleRemoveImage = (index: number) => {
@@ -402,7 +316,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       newImages.splice(index, 1);
       return newImages;
     });
-
+    
     setSelectedFiles(prevFiles => {
       const newFiles = [...prevFiles];
       newFiles.splice(index, 1);
@@ -516,7 +430,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
               <div className="images-container">
                 {selectedImages.map((image, index) => (
                   <div key={index} className="relative rounded-lg overflow-hidden mb-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                    <Image
+                    <NextImage
                       src={image}
                       alt={`Selected ${index + 1}`}
                       width={500}
@@ -661,14 +575,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                 )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
-      {isProcessing && (
-        <div className="absolute inset-0 bg-white/80 dark:bg-gray-800/80 flex items-center justify-center z-10 backdrop-blur-sm">
-          <div className="flex flex-col items-center">
-            <div className="loader mb-4"></div>
-            <p className="text-lg text-gray-600 dark:text-gray-300">{t('processingImage')}</p>
           </div>
         </div>
       )}

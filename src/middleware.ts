@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
+  // Create a response object that we'll modify and return
+  let response = NextResponse.next()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,16 +14,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value
         },
         set(name: string, value: string, options: Record<string, unknown>) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
+          // This is the important part - we need to set the cookie on the response
           response.cookies.set({
             name,
             value,
@@ -34,16 +22,7 @@ export async function middleware(request: NextRequest) {
           })
         },
         remove(name: string, options: Record<string, unknown>) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
+          // Set an empty value to delete the cookie
           response.cookies.set({
             name,
             value: '',
@@ -54,34 +33,32 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Refresh session if it exists
   const { data: { session } } = await supabase.auth.getSession()
 
-  // If the request is for a static asset, allow access regardless of authentication
-  const isStaticAsset = request.nextUrl.pathname.startsWith('/_next') || 
-                       request.nextUrl.pathname.includes('.') || 
-                       request.nextUrl.pathname.startsWith('/aa_logo.svg') ||
-                       request.nextUrl.pathname.startsWith('/aa_logo.png');
-
-  if (isStaticAsset) {
-    return response;
+  // Auth logic based on URL path
+  const url = request.nextUrl.clone()
+  
+  // If user is not signed in and trying to access a protected route
+  if (!session && url.pathname !== '/login') {
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
   }
 
-  // If the user is not signed in and the current path is not /login,
-  // redirect the user to /login
-  if (!session && request.nextUrl.pathname !== '/login') {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  // If the user is signed in and the current path is /login,
-  // redirect the user to /
-  if (session && request.nextUrl.pathname === '/login') {
-    return NextResponse.redirect(new URL('/', request.url))
+  // If user is signed in and trying to access login page
+  if (session && url.pathname === '/login') {
+    url.pathname = '/'
+    return NextResponse.redirect(url)
   }
 
   return response
 }
 
 export const config = {
-  // Define which paths this middleware should run on, excluding static assets
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/auth|.*\\.svg|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.gif).*)'],
+  // Only run on specific paths that need auth protection, exclude static assets, API routes, etc.
+  matcher: [
+    '/',
+    '/login',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|ico)|api/(?!auth)).*)',
+  ],
 }

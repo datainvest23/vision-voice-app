@@ -93,8 +93,8 @@ Questions
 
 // This sets body parser config for Next.js 15+
 export async function POST(request: NextRequest) {
-  // Check authentication first without casting to any
-  const authError = await checkAuth(request);
+  // Check authentication first
+  const authError = await checkAuth();
   if (authError) {
     return authError;
   }

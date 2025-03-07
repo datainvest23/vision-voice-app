@@ -7,8 +7,8 @@ const openai = new OpenAI({
 });
 
 export async function POST(request: Request) {
-  // Check authentication first (ensure checkAuth accepts Request type)
-  const authError = await checkAuth(request);
+  // Check authentication first (without passing request)
+  const authError = await checkAuth();
   if (authError) {
     return authError;
   }
@@ -24,14 +24,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // Convert Blob to File with proper name and type
-    const file = new File([audioFile], 'audio.webm', { type: 'audio/webm' });
+    // Convert Blob to Buffer for Whisper API
+    const arrayBuffer = await audioFile.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Create a proper File object with correct mimetype
+    const file = new File([buffer], 'recording.webm', { 
+      type: audioFile.type || 'audio/webm'
+    });
 
     try {
       const transcription = await openai.audio.transcriptions.create({
         file: file,
         model: "whisper-1",
-        language: "en", // Specify language if known
         response_format: "json",
       });
 
@@ -43,7 +48,7 @@ export async function POST(request: Request) {
         openaiErrorMessage = openaiError.message;
       }
       return NextResponse.json(
-        { error: `OpenAI API Error: ${openaiErrorMessage}` },
+        { error: `Transcription Error: ${openaiErrorMessage}` },
         { status: 500 }
       );
     }
@@ -55,7 +60,7 @@ export async function POST(request: Request) {
       errorMessage = error.message;
     }
     return NextResponse.json(
-      { error: `Failed to process audio: ${errorMessage}` },
+      { error: `Audio Processing Error: ${errorMessage}` },
       { status: 500 }
     );
   }

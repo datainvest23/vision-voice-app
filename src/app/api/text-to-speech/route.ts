@@ -8,7 +8,7 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   // Check authentication first
-  const authError = await checkAuth(request);
+  const authError = await checkAuth();
   if (authError) {
     return authError;
   }
