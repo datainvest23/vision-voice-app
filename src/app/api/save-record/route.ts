@@ -1,4 +1,3 @@
-// src/app/api/save-record/route.ts
 import { NextResponse } from 'next/server';
 import Airtable from 'airtable';
 import { checkAuth } from '@/utils/auth';
@@ -16,15 +15,15 @@ interface Fields {
 
 // Add this interface for the error
 interface AirtableError extends Error {
-    statusCode?: number;
+  statusCode?: number;
 }
 
 // Initialize Airtable base using environment variables
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID!);
 
 export async function POST(request: Request) {
-  // Check authentication first (ensure checkAuth accepts Request type)
-  const authError = await checkAuth(request);
+  // Check authentication first. Note: checkAuth expects no arguments.
+  const authError = await checkAuth();
   if (authError) {
     return authError;
   }
@@ -60,7 +59,7 @@ export async function POST(request: Request) {
     if (error instanceof Error) {
       errorMessage = error.message;
       // If the error contains a statusCode property, use it
-      const anyError = error as AirtableError; // Use the defined interface
+      const anyError = error as AirtableError;
       if (anyError.statusCode) {
         status = anyError.statusCode;
       }
