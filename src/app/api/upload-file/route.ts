@@ -1,3 +1,4 @@
+// src/app/api/upload-file/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 import { checkAuth } from '@/utils/auth';
@@ -12,6 +13,14 @@ cloudinary.config({
 // Configure route options for handling larger files
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 1 minute
+
+// Define the expected Cloudinary result type
+interface CloudinaryUploadResult {
+  secure_url: string;
+  // Add other properties if you need them, e.g.,
+  // public_id: string;
+  // ...
+}
 
 export async function POST(request: NextRequest) {
   // Check authentication first
@@ -33,12 +42,12 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     // Upload to Cloudinary using a Promise
-    const result = await new Promise<any>((resolve, reject) => {
+    const result = await new Promise<CloudinaryUploadResult>((resolve, reject) => { // Use the interface
       cloudinary.uploader.upload_stream(
         { resource_type: 'auto' },
         (error, result) => {
           if (error) reject(error);
-          else resolve(result);
+          else resolve(result as CloudinaryUploadResult); // Cast to the interface
         }
       ).end(buffer);
     });
@@ -48,7 +57,7 @@ export async function POST(request: NextRequest) {
       url: result?.secure_url,
       message: 'File uploaded successfully',
     });
-    
+
   } catch (error: unknown) {
     console.error('Upload error:', error);
     let errorMessage = 'Failed to upload file';

@@ -1,3 +1,4 @@
+// src/app/api/upload-image/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { v2 as cloudinary } from 'cloudinary';
@@ -19,6 +20,12 @@ cloudinary.config({
 // Configure route options for handling larger files
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120; // 2 minutes
+
+// Define the expected Cloudinary result type (reuse from upload-file)
+interface CloudinaryUploadResult {
+  secure_url: string;
+  // ... other properties ...
+}
 
 // Prompt templates for different languages
 const promptTemplates: Record<Language, string> = {
@@ -108,20 +115,20 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     // Upload to Cloudinary first
-    const cloudinaryResult = await new Promise((resolve, reject) => {
+    const cloudinaryResult = await new Promise<CloudinaryUploadResult>((resolve, reject) => { // Use the interface
       cloudinary.uploader.upload_stream(
-        { 
+        {
           resource_type: 'auto',
           timeout: 60000 // 60 second timeout for Cloudinary
         },
         (error, result) => {
           if (error) reject(error);
-          else resolve(result);
+          else resolve(result as CloudinaryUploadResult); // Cast
         }
       ).end(buffer);
     });
 
-    const imageUrl = (cloudinaryResult as any).secure_url;
+    const imageUrl = cloudinaryResult.secure_url; // No more 'any'
 
     try {
       // Call OpenAI Vision API with the image URL and language-specific prompt
@@ -151,7 +158,7 @@ export async function POST(request: NextRequest) {
       // Process the response to extract structured information
       const sections = content.split(/\n\n(?=[A-Za-zÀ-ÖØ-öø-ÿ])/);
       const description = sections[0] || content;
-      const remarks = sections.length > 1 
+      const remarks = sections.length > 1
         ? sections.slice(1).join('\n\n')
         : "What do you think about this image?";
 
@@ -160,7 +167,7 @@ export async function POST(request: NextRequest) {
     } catch (openaiError: unknown) {
       console.error('OpenAI API Error:', openaiError);
       let errorMessage = 'AI Service Error';
-      if (openaiError instanceof Error) {
+      if (openaiError instanceof Error) { // Check if it's an Error object
         errorMessage = openaiError.message;
         if (openaiError.name === 'TimeoutError' || openaiError.message.includes('timeout')) {
           return NextResponse.json(

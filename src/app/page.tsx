@@ -11,7 +11,7 @@ import { useAuth } from './context/AuthContext';
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const { t } = useLanguage();
-  const { user, isLoading: authLoading } = useAuth();
+  const { isLoading: authLoading } = useAuth(); // Remove 'user'
 
   // If auth is loading, show a loading indicator
   if (authLoading) {

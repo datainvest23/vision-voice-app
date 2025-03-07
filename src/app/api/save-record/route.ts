@@ -1,3 +1,4 @@
+// src/app/api/save-record/route.ts
 import { NextResponse } from 'next/server';
 import Airtable from 'airtable';
 import { checkAuth } from '@/utils/auth';
@@ -11,6 +12,11 @@ interface Fields {
   Image_Description: string;
   Audio_Note?: string;
   Image?: Attachment[];
+}
+
+// Add this interface for the error
+interface AirtableError extends Error {
+    statusCode?: number;
 }
 
 // Initialize Airtable base using environment variables
@@ -46,7 +52,7 @@ export async function POST(request: Request) {
       id: record.id,
       message: 'Record created successfully'
     });
-    
+
   } catch (error: unknown) {
     console.error('Airtable error:', error);
     let errorMessage = 'Failed to save record';
@@ -54,7 +60,7 @@ export async function POST(request: Request) {
     if (error instanceof Error) {
       errorMessage = error.message;
       // If the error contains a statusCode property, use it
-      const anyError = error as any;
+      const anyError = error as AirtableError; // Use the defined interface
       if (anyError.statusCode) {
         status = anyError.statusCode;
       }
