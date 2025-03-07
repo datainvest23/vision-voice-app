@@ -34,6 +34,20 @@ type MessageContentParam = MessageContentPartParam | {
   image_url: { url: string };
 };
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+// Type for image URL content that matches OpenAI's expected format
+// This is used as documentation for the structure expected by OpenAI
+type ImageUrlContent = {
+  type: "image_url";
+  image_url: { url: string };
+};
+
+// The combined content type that OpenAI expects in message creation
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type MessageContent = any; // Using any since the original type is not available
+/* eslint-enable @typescript-eslint/no-explicit-any */
+/* eslint-enable @typescript-eslint/no-unused-vars */
+
 // Prompt templates for different languages
 const promptTemplates: Record<Language, string> = {
   en: `You are "Antiques_Appraisal," an expert in evaluating antique items. Your goal is to receive images (e.g., paintings, drawings, sculptures, artifacts), then:
@@ -186,7 +200,8 @@ export async function POST(request: NextRequest) {
       console.log(`Adding message with ${imageUrls.length} image(s) to thread ${thread.id}...`);
       await openai.beta.threads.messages.create(thread.id, {
         role: "user",
-        content: messageContent as any // Type assertion needed due to OpenAI SDK typing limitations
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+        content: messageContent as unknown as any
       });
       
       // Step 3: Run the Assistant on the Thread (without streaming)
