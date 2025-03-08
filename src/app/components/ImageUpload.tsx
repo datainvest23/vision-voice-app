@@ -232,11 +232,17 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           // Play the audio
           await audio.play();
           setIsPlaying(true);
-        } catch (fetchError) {
-          console.error('Text-to-speech fetch error:', fetchError);
+        } catch (error: unknown) {
+          console.error('Text-to-speech fetch error:', error);
           
           // Handle abort error differently - no need to show error for normal timeouts
-          if (fetchError.name !== 'AbortError') {
+          if (error instanceof Error) {
+            if (error.name === 'AbortError') {
+              // Silent handling for abort errors
+            } else {
+              setError('Failed to generate speech. Please try again.');
+            }
+          } else {
             setError('Failed to generate speech. Please try again.');
           }
           
