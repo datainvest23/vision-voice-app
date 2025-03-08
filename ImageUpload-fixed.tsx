@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-import { useState, useRef, Dispatch, SetStateAction, useEffect } from 'react';
+import { useState, useRef, Dispatch, SetStateAction } from 'react';
 import { AudioRecorder } from '@/app/components/AudioRecorder';
 import { useLanguage } from '../context/LanguageContext';
 import ReactMarkdown from 'react-markdown';
@@ -24,12 +24,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [compressionStatus, setCompressionStatus] = useState<string>('');
-  
-  // New state for streaming audio
-  const [audioQueue, setAudioQueue] = useState<string[]>([]);
-  const [isProcessingAudio, setIsProcessingAudio] = useState(false);
-  const [streamAudio, setStreamAudio] = useState(false); // Default to OFF
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   
   // Voice recording state
   const [transcription, setTranscription] = useState<string>('');
@@ -148,171 +142,60 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     return chunks;
   };
 
-  // Process audio queue
-  useEffect(() => {
-    // Skip if audio is already playing or there's nothing in the queue
-    if (isProcessingAudio || audioQueue.length === 0) return;
-    
-    let isMounted = true; // Track component mount state
-    let controller: AbortController | null = null;
-    let timeoutId: NodeJS.Timeout | null = null;
-    
-    const processNextAudio = async () => {
-      try {
-        if (!isMounted) return;
-        setIsProcessingAudio(true);
-        
-        const textToProcess = audioQueue[0];
-        const newQueue = audioQueue.slice(1);
-        setAudioQueue(newQueue);
-        
-        // Only proceed if there's text to process
-        if (!textToProcess.trim()) {
-          setIsProcessingAudio(false);
-          return;
-        }
-        
-        // Create a new AbortController for this request
-        controller = new AbortController();
-        
-        // Set a timeout that won't cause issues if component unmounts
-        timeoutId = setTimeout(() => {
-          if (controller) {
-            controller.abort();
-          }
-        }, 15000); // 15 second timeout, increased from 10
-        
-        try {
-          const response = await fetch('/api/text-to-speech', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ text: textToProcess }),
-            signal: controller.signal
-          });
-          
-          // Clear timeout as soon as we get a response
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
-          }
-          
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-            throw new Error(errorData.error || 'Failed to generate speech');
-          }
-          
-          // If component unmounted while waiting, exit early
-          if (!isMounted) return;
-          
-          const audioBlob = await response.blob();
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-          currentAudioRef.current = audio;
-          
-          // Set up event listeners
-          audio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-            setIsProcessingAudio(false);
-            currentAudioRef.current = null;
-            // If the queue is empty and we're done with AI response, we can set isPlaying to false
-            if (newQueue.length === 0 && aiResponse?.isComplete) {
-              setIsPlaying(false);
-            }
-          };
-          
-          audio.onerror = () => {
-            console.error('Audio playback error');
-            URL.revokeObjectURL(audioUrl);
-            setIsProcessingAudio(false);
-            currentAudioRef.current = null;
-          };
-          
-          // Play the audio
-          await audio.play();
-          setIsPlaying(true);
-        } catch (fetchError) {
-          console.error('Text-to-speech fetch error:', fetchError);
-          
-          // Handle abort error differently - no need to show error for normal timeouts
-          if (fetchError.name !== 'AbortError') {
-            setError('Failed to generate speech. Please try again.');
-          }
-          
-          // Still need to reset state
-          setIsProcessingAudio(false);
-          currentAudioRef.current = null;
-        }
-      } catch (err) {
-        console.error('Audio processing error:', err);
-        setIsProcessingAudio(false);
-        currentAudioRef.current = null;
-      }
-    };
-    
-    processNextAudio();
-    
-    // Cleanup function to prevent memory leaks and state updates after unmount
-    return () => {
-      isMounted = false;
-      
-      // Clean up any ongoing timeout
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      
-      // Clean up any ongoing fetch request
-      if (controller) {
-        controller.abort();
-      }
-    };
-  }, [audioQueue, isProcessingAudio, aiResponse?.isComplete]);
-
-  // Add text to audio queue for processing (used when new chunks arrive)
-  const addToAudioQueue = (text: string) => {
-    if (!streamAudio || !text.trim()) return;
-    setAudioQueue(prev => [...prev, text]);
-  };
-
-  // Manually play description (used for the play button)
   const playDescription = async (text: string) => {
-    if (isPlaying) {
-      // If already playing, stop current playback
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
-      setIsPlaying(false);
-      setAudioQueue([]);
-      setIsProcessingAudio(false);
-      return;
-    }
+    if (isPlaying) return; // Prevent multiple playbacks
     
     try {
-      // Split text into chunks for better processing
+      setIsPlaying(true);
+      
+      // Split text into smaller chunks if it's too long
       const textChunks = splitTextIntoChunks(text);
-      // Enqueue all chunks
-      setAudioQueue(textChunks);
+      console.log(`Text split into ${textChunks.length} chunks for TTS processing`);
+      
+      // Process only the first chunk to keep it responsive
+      // We'll add more sophisticated chunk handling in a future update if needed
+      const chunkToProcess = textChunks[0];
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+      const response = await fetch('/api/text-to-speech', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: chunkToProcess }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to generate speech');
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      audio.onended = () => {
+        setIsPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+      
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
+        setIsPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+        setError('Audio playback failed');
+      };
+
+      await audio.play();
     } catch (err) {
       console.error('Speech playback error:', err);
       setError('Failed to play audio description');
-    }
-  };
-
-  // Toggle streaming audio on/off
-  const toggleStreamAudio = () => {
-    setStreamAudio(prev => !prev);
-    
-    // If turning off, clear any existing playback
-    if (streamAudio) {
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
       setIsPlaying(false);
-      setAudioQueue([]);
-      setIsProcessingAudio(false);
     }
   };
 
@@ -376,20 +259,11 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     }
   };
 
-  // Modified API processing function to handle streaming and concurrent audio
+  // Modified API processing function to handle streaming
   const processImageWithAPI = async (file: File) => {
     try {
       setIsLoading(true);
       setAiResponse({ content: '', isComplete: false });
-      
-      // Clear any existing audio
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
-      setIsPlaying(false);
-      setAudioQueue([]);
-      setIsProcessingAudio(false);
       
       const formData = new FormData();
       
@@ -410,86 +284,61 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 1 minute timeout
       
+      const response = await fetch('/api/upload-image', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        // Try to parse error as JSON first
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to analyze image');
+        } catch {
+          // If not JSON, use text or status
+          const errorText = await response.text().catch(() => 'Unknown error');
+          throw new Error(errorText || `Failed with status: ${response.status}`);
+        }
+      }
+      
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Failed to get response stream');
+      }
+      
+      const decoder = new TextDecoder();
+      let streamedContent = '';
+      
       try {
-        const response = await fetch('/api/upload-image', {
-          method: 'POST',
-          body: formData,
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          // Try to parse error as JSON first
-          try {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to analyze image');
-          } catch {
-            // If not JSON, use text or status
-            const errorText = await response.text().catch(() => 'Unknown error');
-            throw new Error(errorText || `Failed with status: ${response.status}`);
-          }
-        }
-        
-        // Make sure we have a readable stream
-        if (!response.body) {
-          throw new Error('No response body available');
-        }
-        
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let streamedContent = '';
-        let lastProcessedChunk = '';
-        
-        // Manual stream processing
+        // Process the stream chunks
         while (true) {
-          try {
-            const { done, value } = await reader.read();
-            
-            if (done) {
-              // Stream complete
-              setAiResponse({ content: streamedContent, isComplete: true });
-              break;
-            }
-            
-            // Decode chunk and append to content
-            const chunk = decoder.decode(value, { stream: true });
-            
-            // Find the new content that was just added
-            const newContent = chunk;
-            streamedContent += newContent;
-            
-            // Split into sentences for better TTS chunking
-            const sentences = extractSentences(newContent, lastProcessedChunk);
-            
-            if (sentences.length > 0) {
-              // Add sentences to audio queue for processing
-              sentences.forEach(sentence => {
-                if (sentence.trim()) {
-                  addToAudioQueue(sentence);
-                }
-              });
-              
-              // Remember the last part for context in next chunk
-              lastProcessedChunk = sentences[sentences.length - 1];
-            }
-            
-            // Update UI with current content
-            setAiResponse({ content: streamedContent, isComplete: false });
-          } catch (readError) {
-            console.error('Error reading from stream:', readError);
-            throw new Error('Failed to read streaming data');
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            // Stream is complete
+            setAiResponse({ content: streamedContent, isComplete: true });
+            break;
           }
+          
+          // Decode and append the chunk
+          const chunk = decoder.decode(value, { stream: true });
+          streamedContent += chunk;
+          
+          // Update state with the latest content
+          setAiResponse({ content: streamedContent, isComplete: false });
         }
         
-        // If we're not streaming audio in chunks or if no chunks were played yet,
-        // we can play the full content when complete
-        if (!streamAudio && streamedContent) {
+        // Once streaming is complete, play the description
+        if (streamedContent) {
           playDescription(streamedContent);
         }
-      } catch (fetchError) {
-        console.error('Fetch error:', fetchError);
-        throw fetchError;
+      } catch (streamError) {
+        console.error('Stream processing error:', streamError);
+        throw new Error('Failed to process streaming response');
       }
     } catch (error) {
       console.error('API processing error:', error);
@@ -509,102 +358,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Helper function to extract complete sentences from chunks with improved NLP
-  const extractSentences = (newText: string, previousContext: string = ''): string[] => {
-    const textToProcess = previousContext + newText;
-    
-    // Nothing to process
-    if (!textToProcess.trim()) {
-      return [];
-    }
-    
-    // Common abbreviations that contain periods but don't end sentences
-    const commonAbbreviations = [
-      'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Sr.', 'Jr.', 'St.',
-      'etc.', 'e.g.', 'i.e.', 'vs.', 'p.m.', 'a.m.', 'U.S.', 'U.K.',
-      // German
-      'bzw.', 'ca.', 'evtl.', 'ggf.', 'z.B.',
-      // Spanish
-      'Sr.', 'Sra.', 'Dr.', 'Dra.', 'Ud.', 'Uds.',
-      // French
-      'M.', 'Mme.', 'Mlle.', 'Dr.', 'St.'
-    ];
-    
-    // Regular expressions to match different types of sentence boundaries
-    const sentenceBoundaryRegex = new RegExp(
-      // Match end punctuation followed by space or quote
-      `([.!?]+['"])(?=\\s|$)` +
-      // Match end punctuation at end of string or followed by space
-      `|([.!?]+)(?=\\s|$)` +
-      // Match ellipsis followed by capital letter
-      `|(…\\s+)(?=[A-ZÀ-ÖØ-Þ])`,
-      'g'
-    );
-    
-    // First, handle special cases like abbreviations to avoid false sentence breaks
-    let processedText = textToProcess;
-    for (const abbr of commonAbbreviations) {
-      // Replace periods in abbreviations with a special marker
-      const pattern = new RegExp(`\\b${abbr.replace(/\./g, '\\.').replace(/\s/g, '\\s')}\\s`, 'g');
-      processedText = processedText.replace(pattern, (match) => match.replace('.', '###PERIOD###'));
-    }
-    
-    // Find all sentence boundaries in the processed text
-    const matches = [...processedText.matchAll(sentenceBoundaryRegex)];
-    
-    // For minimal text or no matches, just return as a single chunk
-    if (matches.length === 0 || textToProcess.length < 30) {
-      return [textToProcess];
-    }
-    
-    const sentences: string[] = [];
-    let lastIndex = 0;
-    
-    // Extract each sentence using the original text (not processed text)
-    for (const match of matches) {
-      if (match.index !== undefined) {
-        const sentenceEnd = match.index + match[0].length;
-        
-        // Get the raw sentence from original text
-        const sentence = textToProcess.substring(lastIndex, sentenceEnd);
-        
-        // Check if sentence appears to be incomplete (heuristic)
-        const wordCount = sentence.split(/\s+/).length;
-        const hasQuotationBalance = (sentence.match(/"/g) || []).length % 2 === 0;
-        const hasParenthesisBalance = 
-          (sentence.match(/\(/g) || []).length === (sentence.match(/\)/g) || []).length;
-        
-        // If the sentence seems incomplete or too short, and we have more text, keep it for the next round
-        if ((wordCount < 3 || !hasQuotationBalance || !hasParenthesisBalance) && 
-            matches.length > 1 && match !== matches[matches.length - 1]) {
-          continue;
-        }
-        
-        sentences.push(sentence);
-        lastIndex = sentenceEnd;
-      }
-    }
-    
-    // Add any remaining text as the final chunk
-    if (lastIndex < textToProcess.length) {
-      const remainingText = textToProcess.substring(lastIndex);
-      // Only add non-trivial remaining text
-      if (remainingText.trim().length > 0) {
-        sentences.push(remainingText);
-      }
-    }
-    
-    // If we couldn't extract any valid sentences, return the whole text
-    if (sentences.length === 0) {
-      return [textToProcess];
-    }
-    
-    // Restore any abbreviation periods we masked
-    return sentences.map(sentence => 
-      sentence.replace(/###PERIOD###/g, '.')
-    );
   };
 
   const handleTranscriptionComplete = (transcribedText: string) => {
@@ -872,20 +625,12 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                     <div className="text-blue-500 flex items-center justify-center text-lg">
                       <span className="loader mr-3"></span>
                       {t('audioPlaying')}
-                      <button 
-                        onClick={() => playDescription('')} // Empty string to stop playback
-                        className="ml-3 p-1 rounded-full bg-red-500 text-white"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <rect x="6" y="6" width="12" height="12" />
-                        </svg>
-                      </button>
                     </div>
                   ) : (
                     <button
                       onClick={() => playDescription(aiResponse.content)}
                       className="play-button w-full"
-                      disabled={!aiResponse.content}
+                      disabled={!aiResponse.isComplete}
                     >
                       <span className="flex items-center justify-center">
                         <svg 
@@ -978,25 +723,10 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           {error}
         </div>
       )}
-
-      {/* Add audio streaming toggle button */}
-      {aiResponse && (
-        <div className="mb-4">
-          <button
-            onClick={toggleStreamAudio}
-            className={`text-sm px-3 py-1 rounded ${
-              streamAudio 
-                ? 'bg-blue-500 text-white' 
-                : 'bg-gray-200 text-gray-700'
-            }`}
-          >
-            {streamAudio ? t('streamingOn') : t('streamingOff')}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
+
 
 
 

@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useLanguage } from '../context/LanguageContext';
+import { useLanguage, Language } from '../context/LanguageContext';
 
 interface Props {
   onTranscriptionComplete: (text: string) => void;
+  language?: Language;
 }
 
-export function AudioRecorder({ onTranscriptionComplete }: Props) {
+export function AudioRecorder({ onTranscriptionComplete, language }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -74,6 +75,10 @@ export function AudioRecorder({ onTranscriptionComplete }: Props) {
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob);
+      
+      if (language) {
+        formData.append('language', language);
+      }
 
       const response = await fetch('/api/transcribe', {
         method: 'POST',
