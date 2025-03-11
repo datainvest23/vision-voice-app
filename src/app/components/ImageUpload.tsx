@@ -499,8 +499,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           const chunk = decoder.decode(value, { stream: true });
           streamedContent += chunk;
           
-          // Extract sentences from the new chunk
-          const newSentences = extractSentences(chunk, lastProcessedChunk);
+          // Store last processed chunk for context in future processing
           lastProcessedChunk = chunk;
           
           // Update the UI with the new content
