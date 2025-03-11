@@ -37,6 +37,10 @@ const translations: Record<Language, Record<string, string>> = {
     processingResponse: 'Processing response...',
     streamingOn: 'Streaming Audio: On',
     streamingOff: 'Streaming Audio: Off',
+    summary: 'Summary',
+    fullAnalysis: 'Full Analysis',
+    playSummary: 'Play Summary',
+    playFullAnalysis: 'Play Full Analysis',
   },
   de: {
     title: 'Antiquitäten Bewertung',
@@ -58,6 +62,10 @@ const translations: Record<Language, Record<string, string>> = {
     processingResponse: 'Antwort wird verarbeitet...',
     streamingOn: 'Audio-Streaming: Ein',
     streamingOff: 'Audio-Streaming: Aus',
+    summary: 'Zusammenfassung',
+    fullAnalysis: 'Vollständige Analyse',
+    playSummary: 'Zusammenfassung abspielen',
+    playFullAnalysis: 'Vollständige Analyse abspielen',
   },
   es: {
     title: 'Tasación de Antigüedades',
@@ -79,6 +87,10 @@ const translations: Record<Language, Record<string, string>> = {
     processingResponse: 'Procesando respuesta...',
     streamingOn: 'Transmisión de audio: Activada',
     streamingOff: 'Transmisión de audio: Desactivada',
+    summary: 'Resumen',
+    fullAnalysis: 'Análisis Completo',
+    playSummary: 'Reproducir Resumen',
+    playFullAnalysis: 'Reproducir Análisis Completo',
   },
   fr: {
     title: 'Évaluation d\'Antiquités',
@@ -100,6 +112,10 @@ const translations: Record<Language, Record<string, string>> = {
     processingResponse: 'Traitement de la réponse...',
     streamingOn: 'Streaming audio: Activé',
     streamingOff: 'Streaming audio: Désactivé',
+    summary: 'Résumé',
+    fullAnalysis: 'Analyse Complète',
+    playSummary: 'Jouer le Résumé',
+    playFullAnalysis: 'Jouer l\'Analyse Complète',
   }
 };
 

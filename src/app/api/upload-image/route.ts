@@ -147,20 +147,26 @@ export async function POST(request: NextRequest) {
       const stream = new ReadableStream({
         async start(controller) {
           try {
-            // Start the run with stream option
+            // Start the run with the Antiques_Appraisal assistant
             const stream = await openai.beta.threads.runs.createAndStream(
               thread.id,
               {
                 assistant_id: process.env.OPENAI_ASSISTANT_ID!,
-                model: "gpt-4o-mini", // Explicitly use gpt-4o-mini as requested
+                instructions: `Analyze the provided antique item image(s) in ${language}. 
+                  Focus on historical context, materials, style, and notable features.
+                  Provide a detailed analysis that can later be summarized.`
               }
             );
+            
+            let fullResponse = '';
             
             // Process the stream events
             for await (const chunk of stream) {
               if (chunk.event === 'thread.message.delta' && chunk.data?.delta?.content) {
                 for (const content of chunk.data.delta.content) {
                   if (content.type === 'text' && content.text) {
+                    // Accumulate full response while streaming
+                    fullResponse += content.text.value;
                     // Stream text delta to client
                     controller.enqueue(new TextEncoder().encode(content.text.value));
                   }
@@ -168,20 +174,26 @@ export async function POST(request: NextRequest) {
               }
             }
             
+            // Store the thread ID and full response in the request context
+            // This will be used by the summarization endpoint
+            const context = new Map();
+            context.set('threadId', thread.id);
+            context.set('fullResponse', fullResponse);
+            
             controller.close();
           } catch (error) {
-            console.error('Streaming error:', error);
+            console.error('Assistant streaming error:', error);
             controller.error(error);
           }
         }
       });
-      
-      // Return streaming response
-      return new Response(stream, {
+
+      // Return the streaming response
+      return new NextResponse(stream, {
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',
-          'Transfer-Encoding': 'chunked',
-        },
+          'Transfer-Encoding': 'chunked'
+        }
       });
       
     } catch (assistantError: unknown) {
