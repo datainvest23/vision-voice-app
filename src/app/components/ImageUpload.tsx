@@ -156,7 +156,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     
     let isMounted = true; // Track component mount state
     const controller = new AbortController(); // Create new controller
-    const timeoutId: NodeJS.Timeout | null = null;
     
     const processNextAudio = async () => {
       try {
@@ -173,6 +172,8 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           return;
         }
 
+        console.log('Sending text to TTS API...');
+        
         // Use the controller.signal in your fetch calls
         const response = await fetch('/api/text-to-speech', {
           method: 'POST',
@@ -188,29 +189,41 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         }
 
         const audioBlob = await response.blob();
-        if (!isMounted) return;
+        
+        // Check if component is still mounted before proceeding
+        if (!isMounted) {
+          console.log('Component unmounted after fetch, aborting audio playback');
+          return;
+        }
 
+        console.log('Creating audio from blob...');
         const audio = new Audio(URL.createObjectURL(audioBlob));
         currentAudioRef.current = audio;
 
+        // Play audio and wait for it to complete
         await new Promise((resolve, reject) => {
           audio.onended = resolve;
           audio.onerror = reject;
           audio.play().catch(reject);
         });
 
+        // Only update state if still mounted
         if (isMounted) {
           setIsProcessingAudio(false);
           currentAudioRef.current = null;
         }
-      } catch (err) {
-        // Only log and update state if the error is not an abort error
-        if (err.name !== 'AbortError') {
-          console.error('Audio processing error:', err);
-          if (isMounted) {
-            setIsProcessingAudio(false);
-            currentAudioRef.current = null;
-          }
+      } catch (error: unknown) {
+        // Type-safe error handling
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('Audio processing aborted - component unmounted or cleanup triggered');
+        } else {
+          console.error('Audio processing error:', error);
+        }
+        
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setIsProcessingAudio(false);
+          currentAudioRef.current = null;
         }
       }
     };
@@ -222,18 +235,17 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       console.log('Audio processing useEffect cleanup triggered');
       isMounted = false;
       
-      // Abort any ongoing fetch requests
-      controller.abort();
-      
-      // Clean up any ongoing audio playback
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
-      
-      // Clean up any ongoing timeout
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      try {
+        // Abort any ongoing fetch requests
+        controller.abort();
+        
+        // Clean up any ongoing audio playback
+        if (currentAudioRef.current) {
+          currentAudioRef.current.pause();
+          currentAudioRef.current = null;
+        }
+      } catch (cleanupError) {
+        console.error('Error during cleanup:', cleanupError);
       }
     };
   }, [isProcessingAudio, audioQueue]);
@@ -276,10 +288,11 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 
   // Toggle streaming audio on/off
   const toggleStreamAudio = () => {
-    setStreamAudio(prev => !prev);
+    const newStreamAudio = !streamAudio;
+    setStreamAudio(newStreamAudio);
     
     // If turning off, clear any existing playback
-    if (streamAudio) {
+    if (!newStreamAudio) {
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
         currentAudioRef.current = null;
@@ -287,6 +300,12 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       setIsPlaying(false);
       setAudioQueue([]);
       setIsProcessingAudio(false);
+    } else {
+      // If turning on and we have a summary, play it
+      if (aiResponse?.summary) {
+        console.log('Auto-playing summary audio after enabling streaming');
+        playDescription(aiResponse.summary);
+      }
     }
   };
 
@@ -378,21 +397,21 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         formData.append('files', file);
       }
       
+      // Add language preference
       formData.append('language', language);
       
-      console.log(`Uploading ${selectedFiles.length || 1} image(s) for analysis...`);
+      console.log(`Sending ${selectedFiles.length || 1} image(s) for analysis...`);
       
-      // STEP 1: Send images to Assistant and stream the response
-      // --------------------------------------------------------
-      
-      // Set a timeout to handle potential long requests
+      // Set a timeout for the API call
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.log('Upload request timeout triggered');
+        console.log('API request timeout triggered');
         controller.abort();
-      }, 60000); // 1 minute timeout
+      }, 60000); // 60 second timeout for image processing
       
       try {
+        // STEP 1: Send image to Assistant API
+        // -----------------------------------
         const response = await fetch('/api/upload-image', {
           method: 'POST',
           body: formData,
@@ -418,7 +437,8 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           throw new Error('No response body available');
         }
         
-        // Process the streaming response from the Assistant
+        // STEP 2: Process the streaming response from the Assistant
+        // --------------------------------------------------------
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let streamedContent = '';
@@ -428,96 +448,79 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         
         // Manual stream processing
         while (true) {
-          try {
-            const { done, value } = await reader.read();
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            console.log('Stream complete');
             
-            if (done) {
-              // STEP 2: Assistant response streaming is complete
-              // -----------------------------------------------
-              console.log("Assistant response streaming complete");
+            // Final update with complete flag
+            setAiResponse(prev => {
+              if (!prev) return { content: streamedContent, isComplete: true };
+              return { ...prev, content: streamedContent, isComplete: true };
+            });
+            
+            // STEP 3: Generate summary with GPT-4o-mini
+            // ----------------------------------------
+            if (streamedContent && streamedContent.trim()) {
+              console.log(`Generating summary for ${streamedContent.length} chars...`);
               
-              // First, update state to show the complete content right away
-              setAiResponse({ 
-                content: streamedContent, 
-                isComplete: true 
-              });
-              
-              // STEP 3: Generate summary as a separate step
-              // ------------------------------------------
-              if (streamedContent && streamedContent.trim()) {
-                console.log("Starting summarization process...");
+              // Run summarization in a separate try-catch to isolate errors
+              try {
+                const summarizedText = await getSummary(streamedContent);
                 
-                // Run summarization in a separate try-catch to isolate errors
-                try {
-                  const summarizedText = await getSummary(streamedContent);
+                if (summarizedText && summarizedText.trim()) {
+                  console.log(`Received summary (${summarizedText.length} chars)`);
                   
-                  if (summarizedText && summarizedText.trim()) {
-                    console.log(`Received summary (${summarizedText.length} chars)`);
-                    
-                    // Update state with the summary
-                    setAiResponse(prev => {
-                      if (!prev) return { content: streamedContent, isComplete: true, summary: summarizedText };
-                      return { ...prev, summary: summarizedText };
-                    });
-                    
-                    // STEP 4: Play the summary audio
-                    // ------------------------------
-                    console.log("Playing summary audio...");
-                    playDescription(summarizedText);
-                  } else {
-                    console.warn("Received empty summary, will not play audio");
-                  }
-                } catch (summaryError) {
-                  console.error('Error generating summary:', summaryError);
-                  // Don't let summary errors block the UI update
+                  // Update state with the summary
+                  setAiResponse(prev => {
+                    if (!prev) return { content: streamedContent, isComplete: true, summary: summarizedText };
+                    return { ...prev, summary: summarizedText };
+                  });
+                  
+                  // STEP 4: Play the summary audio (only the summary, not the full response)
+                  // ------------------------------
+                  console.log("Playing summary audio...");
+                  playDescription(summarizedText);
+                } else {
+                  console.warn("Received empty summary, will not play audio");
                 }
-              } else {
-                console.warn("No content to summarize");
+              } catch (summaryError) {
+                console.error('Error generating summary:', summaryError);
+                // Don't let summary errors block the UI update
               }
-              
-              break;
+            } else {
+              console.warn("No content to summarize");
             }
             
-            // Process streaming chunk from Assistant
-            const chunk = decoder.decode(value, { stream: true });
-            streamedContent += chunk;
-            
-            // Update UI with current content
-            setAiResponse({ content: streamedContent, isComplete: false });
-            
-            // Extract sentences for better display
-            const sentences = extractSentences(chunk, lastProcessedChunk);
-            if (sentences.length > 0) {
-              lastProcessedChunk = sentences[sentences.length - 1];
-            }
-          } catch (readError) {
-            console.error('Error reading from stream:', readError);
-            throw new Error('Failed to read streaming data');
+            break;
           }
+          
+          // Process the chunk
+          const chunk = decoder.decode(value, { stream: true });
+          streamedContent += chunk;
+          
+          // Extract sentences from the new chunk
+          const newSentences = extractSentences(chunk, lastProcessedChunk);
+          lastProcessedChunk = chunk;
+          
+          // Update the UI with the new content
+          setAiResponse(prev => {
+            if (!prev) return { content: streamedContent, isComplete: false };
+            return { ...prev, content: streamedContent };
+          });
         }
-      } catch (fetchError) {
-        console.error('Fetch error:', fetchError);
-        
-        if (fetchError instanceof Error) {
-          if (fetchError.name === 'AbortError') {
-            setError('Request timed out. Please try again with a smaller image.');
-          } else {
-            setError(fetchError.message || 'Failed to analyze image');
-          }
-        } else {
-          setError('Failed to analyze image');
+      } catch (streamError) {
+        if (streamError instanceof Error && streamError.name === 'AbortError') {
+          console.log('Request aborted due to timeout');
+          throw new Error('Analysis timed out. Please try again with a clearer image.');
         }
+        throw streamError;
+      } finally {
+        clearTimeout(timeoutId);
       }
     } catch (error) {
-      console.error('API processing error:', error);
-      let errorMessage = 'Failed to analyze image';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      setError(errorMessage);
-      setAiResponse(null);
+      console.error('Image processing error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to process image');
     } finally {
       setIsLoading(false);
     }
@@ -720,8 +723,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     
     try {
       const controller = new AbortController();
-      // Store the timeout ID properly
-      let timeoutId: NodeJS.Timeout | null = setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         console.log('Summary request timeout triggered');
         controller.abort();
       }, 25000); // 25 second timeout (optimized for Vercel)
@@ -732,61 +734,32 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ 
-            text: textToSummarize.trim(), // Ensure text is trimmed and limited
-            language 
-          }),
+          body: JSON.stringify({ text: textToSummarize }),
           signal: controller.signal
         });
         
-        // Clear timeout as soon as we get a response
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
-        }
+        // Clear the timeout as soon as we get a response
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
-          // Try to parse as JSON, but handle non-JSON responses too
-          const contentType = response.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-            console.error('Summary API error:', errorData);
-            throw new Error(errorData.error || `Failed to generate summary (Status: ${response.status})`);
-          } else {
-            throw new Error(`Failed to generate summary (Status: ${response.status})`);
-          }
+          throw new Error(`Summarization failed with status: ${response.status}`);
         }
         
         const data = await response.json();
-        const summary = data.summary || '';
-        
-        console.log(`Received summary (${summary.length} characters)`);
-        return summary;
-      } catch (fetchError) {
-        // Clean up timeout if still active
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
+        return data.summary || '';
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('Summary request aborted due to timeout');
+          return `Summary of the analysis (timed out): ${textToSummarize.substring(0, 200)}...`;
         }
-        
-        // Properly handle AbortError
-        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          console.log('Summary request was aborted (timeout or unmount)');
-          // Create a fallback summary for timeout case - just use the first paragraph
-          const firstParagraph = text.split('\n\n')[0] || text.split('.')[0] || text.substring(0, 200);
-          return firstParagraph.length > 300 ? firstParagraph.substring(0, 300) + '...' : firstParagraph;
-        }
-        
-        // Rethrow for other errors
-        throw fetchError;
+        throw error; // Re-throw other errors
+      } finally {
+        clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
       }
     } catch (error) {
-      console.error('Summary generation error:', error);
-      
-      // Create a very simple fallback - first few sentences
-      const sentences = text.split(/[.!?]+\s+/);
-      const shortText = sentences.slice(0, 3).join('. ');
-      return shortText + (sentences.length > 3 ? '...' : '');
+      console.error('Error generating summary:', error);
+      // Provide a fallback summary
+      return `Summary of the analysis: ${textToSummarize.substring(0, 200)}...`;
     }
   };
 
