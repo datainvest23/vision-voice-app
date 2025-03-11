@@ -192,7 +192,8 @@ export async function POST(request: NextRequest) {
       return new NextResponse(stream, {
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',
-          'Transfer-Encoding': 'chunked'
+          'Transfer-Encoding': 'chunked',
+          'x-thread-id': thread.id
         }
       });
       

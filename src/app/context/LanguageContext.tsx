@@ -41,6 +41,8 @@ const translations: Record<Language, Record<string, string>> = {
     fullAnalysis: 'Full Analysis',
     playSummary: 'Play Summary',
     playFullAnalysis: 'Play Full Analysis',
+    processingComment: 'Processing your comment...',
+    analyzeImages: 'Analyze Images',
   },
   de: {
     title: 'Antiquitäten Bewertung',
@@ -66,6 +68,8 @@ const translations: Record<Language, Record<string, string>> = {
     fullAnalysis: 'Vollständige Analyse',
     playSummary: 'Zusammenfassung abspielen',
     playFullAnalysis: 'Vollständige Analyse abspielen',
+    processingComment: 'Verarbeitung Ihres Kommentars...',
+    analyzeImages: 'Bilder analysieren',
   },
   es: {
     title: 'Tasación de Antigüedades',
@@ -91,6 +95,8 @@ const translations: Record<Language, Record<string, string>> = {
     fullAnalysis: 'Análisis Completo',
     playSummary: 'Reproducir Resumen',
     playFullAnalysis: 'Reproducir Análisis Completo',
+    processingComment: 'Procesando tu comentario...',
+    analyzeImages: 'Analizar imágenes',
   },
   fr: {
     title: 'Évaluation d\'Antiquités',
@@ -116,6 +122,8 @@ const translations: Record<Language, Record<string, string>> = {
     fullAnalysis: 'Analyse Complète',
     playSummary: 'Jouer le Résumé',
     playFullAnalysis: 'Jouer l\'Analyse Complète',
+    processingComment: 'Traitement de votre commentaire...',
+    analyzeImages: 'Analyser les images',
   }
 };
 

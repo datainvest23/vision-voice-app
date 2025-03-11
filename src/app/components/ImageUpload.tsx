@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
 import { useState, useRef, Dispatch, SetStateAction, useEffect } from 'react';
@@ -22,11 +23,14 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
   const [error, setError] = useState<string>('');
+  
+  // Used in UI conditionals, keeping for future audio functionality
   const [isPlaying, setIsPlaying] = useState(false);
+  
   const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [compressionStatus, setCompressionStatus] = useState<string>('');
   
-  // New state for streaming audio
+  // Audio state - keeping for future use
   const [audioQueue, setAudioQueue] = useState<string[]>([]);
   const [isProcessingAudio, setIsProcessingAudio] = useState(false);
   const [streamAudio, setStreamAudio] = useState(true); // Default to ON
@@ -36,6 +40,10 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const [transcription, setTranscription] = useState<string>('');
   const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  
+  // Thread management
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [isAwaitingResponse, setIsAwaitingResponse] = useState(false);
 
   // Reference to file inputs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,40 +123,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     else return (bytes / 1048576).toFixed(1) + ' MB';
   };
 
-  // Helper function to split text into manageable chunks
-  const splitTextIntoChunks = (text: string, maxChars = 1000) => {
-    // If text is short enough, return it as is
-    if (text.length <= maxChars) return [text];
-    
-    const chunks = [];
-    let startIndex = 0;
-    
-    while (startIndex < text.length) {
-      // Find a good breaking point (sentence ending)
-      let endIndex = startIndex + maxChars;
-      if (endIndex >= text.length) {
-        endIndex = text.length;
-      } else {
-        // Try to find a sentence end
-        const possibleBreak = text.substring(startIndex, endIndex).lastIndexOf('.');
-        if (possibleBreak > 0) {
-          endIndex = startIndex + possibleBreak + 1;
-        } else {
-          // If no sentence break, try to find a space
-          const possibleWordBreak = text.substring(startIndex, endIndex).lastIndexOf(' ');
-          if (possibleWordBreak > 0) {
-            endIndex = startIndex + possibleWordBreak + 1;
-          }
-        }
-      }
-      
-      chunks.push(text.substring(startIndex, endIndex));
-      startIndex = endIndex;
-    }
-    
-    return chunks;
-  };
-
   // Process audio queue
   useEffect(() => {
     // Skip if audio is already playing or there's nothing in the queue
@@ -185,7 +159,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         });
 
         if (!response.ok) {
-          throw new Error('Text-to-speech request failed');
+          throw new Error(`Text-to-speech request failed with status: ${response.status}`);
         }
 
         const audioBlob = await response.blob();
@@ -197,20 +171,50 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         }
 
         console.log('Creating audio from blob...');
-        const audio = new Audio(URL.createObjectURL(audioBlob));
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
         currentAudioRef.current = audio;
 
-        // Play audio and wait for it to complete
-        await new Promise((resolve, reject) => {
-          audio.onended = resolve;
-          audio.onerror = reject;
-          audio.play().catch(reject);
-        });
-
-        // Only update state if still mounted
-        if (isMounted) {
-          setIsProcessingAudio(false);
-          currentAudioRef.current = null;
+        // Debug audio data
+        console.log(`Audio blob type: ${audioBlob.type}, size: ${audioBlob.size} bytes`);
+        
+        // Add error handler
+        audio.onerror = (e) => {
+          console.error('Audio playback error:', e);
+          if (isMounted) {
+            setError('Failed to play audio. Please try again.');
+            setIsProcessingAudio(false);
+          }
+        };
+        
+        // Add ended handler
+        audio.onended = () => {
+          console.log('Audio playback completed');
+          if (isMounted) {
+            setIsProcessingAudio(false);
+            currentAudioRef.current = null;
+            
+            // Revoke the URL to prevent memory leaks
+            URL.revokeObjectURL(audioUrl);
+            
+            // Process next item in queue if any
+            if (newQueue.length > 0) {
+              setTimeout(() => {
+                setAudioQueue(newQueue);
+              }, 100);
+            } else {
+              setIsPlaying(false);
+            }
+          }
+        };
+        
+        console.log('Starting audio playback...');
+        try {
+          await audio.play();
+          console.log('Audio playback started successfully');
+        } catch (playError) {
+          console.error('Failed to start audio playback:', playError);
+          throw playError;
         }
       } catch (error: unknown) {
         // Type-safe error handling
@@ -224,6 +228,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         if (isMounted) {
           setIsProcessingAudio(false);
           currentAudioRef.current = null;
+          setError('Audio playback failed. Please try again.');
         }
       }
     };
@@ -251,39 +256,10 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   }, [isProcessingAudio, audioQueue]);
 
   // Manually play description (used for the play button)
-  const playDescription = async (text: string) => {
-    // If already playing, stop the current playback
-    if (isPlaying) {
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
-      setIsPlaying(false);
-      setAudioQueue([]);
-      setIsProcessingAudio(false);
-      return;
-    }
-    
-    try {
-      // Make sure we have text to play
-      if (!text || text.trim() === '') {
-        console.warn('No text provided for playback');
-        return;
-      }
-      
-      console.log(`Preparing to play audio for text (${text.length} chars)`);
-      
-      // Split text into chunks for better processing
-      const textChunks = splitTextIntoChunks(text);
-      console.log(`Text split into ${textChunks.length} chunks for TTS processing`);
-      
-      // Enqueue all chunks
-      setAudioQueue(textChunks);
-      setIsPlaying(true);
-    } catch (err) {
-      console.error('Speech playback error:', err);
-      setError('Failed to play audio description');
-    }
+  const playDescription = async (_: string) => {
+    console.log("Audio playback functionality disabled as requested");
+    // Implementation removed to disable audio playback
+    return;
   };
 
   // Toggle streaming audio on/off
@@ -355,12 +331,8 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       setSelectedImages(newImageUrls);
       setSelectedFiles(newFiles);
       
-      // Process images with AI after adding new ones
-      // Always process all available images to get a comprehensive analysis
-      if (newFiles.length > 0) {
-        // Pass the first file as a parameter, but the function will use all files
-        await processImageWithAPI(newFiles[0]);
-      }
+      // Don't automatically process images with API after upload
+      // Let the user decide when to analyze after they've added all desired images
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process image');
     } finally {
@@ -372,8 +344,11 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   // Modified API processing function to handle streaming and concurrent audio
   const processImageWithAPI = async (file: File) => {
     try {
-      setIsLoading(true);
+      // Initialize state but don't show full loading overlay during streaming
       setAiResponse({ content: '', isComplete: false });
+      
+      // Show loading only during initial API setup
+      setIsLoading(true);
       
       // Clear any existing audio
       if (currentAudioRef.current) {
@@ -383,6 +358,9 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       setIsPlaying(false);
       setAudioQueue([]);
       setIsProcessingAudio(false);
+      
+      // Reset thread state
+      setThreadId(null);
       
       const formData = new FormData();
       
@@ -418,6 +396,9 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           signal: controller.signal
         });
         
+        // Remove loading overlay as we're about to stream the response
+        setIsLoading(false);
+        
         clearTimeout(timeoutId);
         
         if (!response.ok) {
@@ -430,6 +411,13 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
             const errorText = await response.text().catch(() => 'Unknown error');
             throw new Error(errorText || `Failed with status: ${response.status}`);
           }
+        }
+        
+        // Get the thread ID from the response headers
+        const responseThreadId = response.headers.get('x-thread-id');
+        if (responseThreadId) {
+          console.log(`Thread ID received: ${responseThreadId}`);
+          setThreadId(responseThreadId);
         }
         
         // Make sure we have a readable stream
@@ -476,10 +464,10 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                     return { ...prev, summary: summarizedText };
                   });
                   
-                  // STEP 4: Play the summary audio (only the summary, not the full response)
+                  // STEP 4: Play the summary audio (DISABLED)
                   // ------------------------------
-                  console.log("Playing summary audio...");
-                  playDescription(summarizedText);
+                  console.log("Audio playback disabled as requested");
+                  // playDescription(summarizedText); // Commented out to disable audio
                 } else {
                   console.warn("Received empty summary, will not play audio");
                 }
@@ -523,7 +511,111 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 
   const handleTranscriptionComplete = (transcribedText: string) => {
     setTranscription(transcribedText);
-    setIsReadyToSubmit(true);
+    // Instead of just preparing for Airtable, send the comment back to the Assistant
+    if (transcribedText.trim() && threadId) {
+      sendUserCommentToAssistant(transcribedText);
+    } else if (!threadId) {
+      setError('No active conversation thread found');
+    } else {
+      setError('No transcription text to send');
+    }
+  };
+
+  // New function to send user comment to Assistant
+  const sendUserCommentToAssistant = async (userComment: string) => {
+    if (!threadId) {
+      setError('No thread ID available');
+      return;
+    }
+
+    try {
+      setIsAwaitingResponse(true);
+      
+      // Create request body
+      const requestBody = {
+        threadId,
+        message: userComment,
+        language
+      };
+      
+      // Send the request to add the user message to the thread
+      const response = await fetch('/api/send-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      if (!response.ok) {
+        // Handle error
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(errorText || `Failed with status: ${response.status}`);
+      }
+      
+      // Process the streaming response
+      if (!response.body) {
+        throw new Error('No response body available');
+      }
+      
+      // Stream the assistant's response
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let streamedContent = '';
+      
+      console.log('Starting to stream Assistant response to user comment...');
+      
+      // Manual stream processing, similar to the initial processing
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          console.log('Stream complete for user comment response');
+          
+          // Final update with complete flag
+          setAiResponse(prev => {
+            if (!prev) return { content: streamedContent, isComplete: true };
+            return { ...prev, content: streamedContent, isComplete: true };
+          });
+          
+          // Generate summary for the updated response
+          if (streamedContent && streamedContent.trim()) {
+            try {
+              const summarizedText = await getSummary(streamedContent);
+              
+              if (summarizedText && summarizedText.trim()) {
+                console.log(`Received updated summary (${summarizedText.length} chars)`);
+                
+                // Update state with the summary
+                setAiResponse(prev => {
+                  if (!prev) return { content: streamedContent, isComplete: true, summary: summarizedText };
+                  return { ...prev, summary: summarizedText };
+                });
+              }
+            } catch (error) {
+              console.error('Error generating summary for updated response:', error);
+            }
+          }
+          
+          break;
+        }
+        
+        // Process the chunk
+        const chunk = decoder.decode(value, { stream: true });
+        streamedContent += chunk;
+        
+        // Update the UI with the new content
+        setAiResponse(prev => {
+          if (!prev) return { content: streamedContent, isComplete: false };
+          return { ...prev, content: streamedContent };
+        });
+      }
+    } catch (error) {
+      console.error('Error sending user comment to Assistant:', error);
+      setError(error instanceof Error ? error.message : 'Failed to send comment');
+    } finally {
+      setIsAwaitingResponse(false);
+    }
   };
 
   const saveToAirtable = async () => {
@@ -793,16 +885,17 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           <div className="grid-layout">
             <div className="flex flex-col space-y-4">
               <div className="images-container">
-                {selectedImages.map((image, index) => (
-                  <div key={index} className="relative rounded-lg overflow-hidden mb-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                    <NextImage
-                      src={image}
-                      alt={`Selected ${index + 1}`}
+                {selectedImages.map((imageUrl, index) => (
+                  <div key={index} className="image-container relative">
+                    <NextImage 
+                      src={imageUrl} 
+                      alt={`Selected ${index + 1}`} 
                       width={500}
                       height={300}
-                      className="mx-auto"
+                      className="selected-image"
+                      style={{ objectFit: 'contain' }}
                     />
-                    <button
+                    <button 
                       className="absolute top-2 right-2 bg-red-500 rounded-full p-1 text-white"
                       onClick={() => handleRemoveImage(index)}
                     >
@@ -828,60 +921,54 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                 ))}
                 
                 {selectedImages.length < 3 && (
-                  <button 
-                    onClick={handleUploadOptionClick}
-                    className="mt-4 text-blue-500 hover:text-blue-700 font-medium"
+                  <button
+                    onClick={() => {
+                      setShowUploadOptions(true);
+                    }}
+                    className="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded shadow"
                   >
-                    {t('addAnother')} ({3 - selectedImages.length} {t('remaining')})
+                    <div className="flex items-center">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      {t('addAnotherImage')}
+                    </div>
                   </button>
+                )}
+                
+                {/* Analyze button to process images after all uploads are complete */}
+                {selectedFiles.length > 0 && !aiResponse && (
+                  <div className="mt-6 mb-4">
+                    <button
+                      onClick={() => processImageWithAPI(selectedFiles[0])}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-6 rounded-lg shadow-lg text-lg transition-colors duration-200"
+                    >
+                      <div className="flex items-center justify-center">
+                        <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        {t('analyzeImages')}
+                      </div>
+                    </button>
+                  </div>
                 )}
               </div>
 
               {aiResponse && (
                 <div className="card">
-                  {isPlaying ? (
-                    <div className="text-blue-500 flex items-center justify-center text-lg">
-                      <span className="loader mr-3"></span>
-                      {t('audioPlaying')}
-                      <button 
-                        onClick={() => playDescription('')} // Empty string to stop playback
-                        className="ml-3 p-1 rounded-full bg-red-500 text-white"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <rect x="6" y="6" width="12" height="12" />
-                        </svg>
-                      </button>
+                  <button
+                    onClick={() => {
+                      setShowUploadOptions(true);
+                    }}
+                    className="mb-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded shadow"
+                  >
+                    <div className="flex items-center">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      {t('addAnotherImage')}
                     </div>
-                  ) : (
-                    <button
-                      onClick={() => playDescription(aiResponse.content)}
-                      className="play-button w-full"
-                      disabled={!aiResponse.content}
-                    >
-                      <span className="flex items-center justify-center">
-                        <svg 
-                          className="w-5 h-5 mr-2" 
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path 
-                            strokeLinecap="round" 
-                            strokeLinejoin="round" 
-                            strokeWidth={2} 
-                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                          />
-                          <path 
-                            strokeLinecap="round" 
-                            strokeLinejoin="round" 
-                            strokeWidth={2} 
-                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                        {aiResponse.isComplete ? t('playFullAnalysis') : t('processingResponse')}
-                      </span>
-                    </button>
-                  )}
+                  </button>
                 </div>
               )}
             </div>
@@ -895,32 +982,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                       <div className="mb-8">
                         <div className="flex justify-between items-center mb-4">
                           <h2 className="text-xl font-semibold">{t('summary')}</h2>
-                          <button
-                            onClick={() => playDescription(aiResponse.summary || '')}
-                            className="text-blue-500 hover:text-blue-700 flex items-center text-sm"
-                            disabled={isPlaying}
-                          >
-                            <svg 
-                              className="w-4 h-4 mr-1" 
-                              fill="none" 
-                              stroke="currentColor" 
-                              viewBox="0 0 24 24"
-                            >
-                              <path 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round" 
-                                strokeWidth={2} 
-                                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                              />
-                              <path 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round" 
-                                strokeWidth={2} 
-                                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                            {t('playSummary')}
-                          </button>
                         </div>
                         <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
                           <div className="text-gray-800 dark:text-gray-200 italic">
@@ -955,10 +1016,21 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 
               {aiResponse && aiResponse.isComplete && !isReadyToSubmit && !isSubmitted && (
                 <div className="mt-8">
-                  <AudioRecorder 
-                    onTranscriptionComplete={handleTranscriptionComplete} 
-                    language={language}
-                  />
+                  {isAwaitingResponse ? (
+                    <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded relative mb-4">
+                      <div className="flex items-center">
+                        <div className="typing-indicator mr-2">
+                          <span></span>
+                        </div>
+                        <span>{t('processingComment')}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <AudioRecorder 
+                      onTranscriptionComplete={handleTranscriptionComplete} 
+                      language={language}
+                    />
+                  )}
                 </div>
               )}
 
@@ -991,22 +1063,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       {error && (
         <div className="fixed bottom-4 left-4 right-4 p-6 bg-red-50 dark:bg-red-900/50 text-red-600 dark:text-red-200 rounded-xl text-lg shadow-lg max-w-2xl mx-auto">
           {error}
-        </div>
-      )}
-
-      {/* Add audio streaming toggle button */}
-      {aiResponse && (
-        <div className="mb-4">
-          <button
-            onClick={toggleStreamAudio}
-            className={`text-sm px-3 py-1 rounded ${
-              streamAudio 
-                ? 'bg-blue-500 text-white' 
-                : 'bg-gray-200 text-gray-700'
-            }`}
-          >
-            {streamAudio ? t('streamingOn') : t('streamingOff')}
-          </button>
         </div>
       )}
     </div>

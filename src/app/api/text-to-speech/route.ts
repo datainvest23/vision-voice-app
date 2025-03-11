@@ -70,22 +70,23 @@ export async function POST(request: Request) {
       // Use a smaller, faster model and a lightweight voice
       const mp3Response = await openai.audio.speech.create({
         model: "tts-1", // tts-1 is faster than tts-1-hd
-        voice: "ash", // Changed from "alloy" to "ash"
+        voice: "alloy", // Using alloy voice which tends to be more reliable
         input: textToProcess,
-        speed: 1.2, // Slightly faster playback to reduce processing time
+        speed: 1.0, // Normal speed for better quality
       });
 
       // Get the audio data as a buffer
       const buffer = Buffer.from(await mp3Response.arrayBuffer());
       console.log(`Generated audio (${buffer.length} bytes)`);
 
-      // Return the audio file with proper headers
+      // Return the audio data with proper headers
       return new NextResponse(buffer, {
+        status: 200,
         headers: {
           'Content-Type': 'audio/mpeg',
           'Content-Length': buffer.length.toString(),
-          'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
-        },
+          'Cache-Control': 'no-cache'
+        }
       });
     } catch (openaiError) {
       console.error('OpenAI TTS API error:', openaiError);
