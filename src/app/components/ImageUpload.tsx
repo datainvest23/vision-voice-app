@@ -803,7 +803,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         
         .grid-layout {
           display: grid;
-          grid-template-columns: 1fr 2fr;
+          grid-template-columns: minmax(200px, 1fr) 3fr;
           gap: 1.5rem;
           width: 100%;
         }
@@ -818,7 +818,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         .images-container {
           display: flex;
           flex-direction: column;
-          gap: 1rem;
+          gap: 0.5rem;
         }
         
         .image-container {
@@ -826,6 +826,8 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           overflow: hidden;
           position: relative;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          max-height: 120px;
+          width: 100%;
         }
         
         .selected-image {
@@ -834,6 +836,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           object-fit: contain;
           border-radius: 0.375rem;
           background-color: #f8f9fa;
+          max-height: 120px;
         }
         
         /* Optimize text for better readability */
@@ -848,6 +851,33 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           overflow-wrap: break-word;
           word-wrap: break-word;
           hyphens: auto;
+          padding: 0.5rem;
+        }
+        
+        /* Fix spacing in markdown content */
+        .prose {
+          font-size: 1rem;
+          line-height: 1.5;
+        }
+        
+        .prose h2 {
+          margin-top: 1.5rem;
+          margin-bottom: 0.75rem;
+          font-weight: 600;
+          font-size: 1.25rem;
+        }
+        
+        .prose p {
+          margin-bottom: 1rem;
+        }
+        
+        .prose ul {
+          margin-bottom: 1rem;
+          padding-left: 1.5rem;
+        }
+        
+        .prose li + li {
+          margin-top: 0.25rem;
         }
       `}</style>
       
@@ -942,16 +972,16 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                     <NextImage 
                       src={imageUrl} 
                       alt={`Selected ${index + 1}`} 
-                      width={500}
-                      height={300}
+                      width={200}
+                      height={120}
                       className="selected-image"
-                      style={{ objectFit: 'contain' }}
+                      style={{ objectFit: 'contain', maxHeight: '120px' }}
                     />
                     <button 
-                      className="absolute top-2 right-2 bg-red-500 rounded-full p-1 text-white"
+                      className="absolute top-1 right-1 bg-red-500 rounded-full p-1 text-white"
                       onClick={() => handleRemoveImage(index)}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
@@ -1008,7 +1038,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 
               {/* Add Summary below images when available */}
               {aiResponse && aiResponse.summary && (
-                <div className="mt-6 mb-4">
+                <div className="mt-4 mb-4">
                   <div className="flex justify-between items-center mb-2">
                     <h2 className="text-xl font-semibold">{t('summary')}</h2>
                   </div>
@@ -1018,10 +1048,14 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                         remarkPlugins={[remarkGfm]}
                         components={{
                           // Override paragraph to reduce spacing
-                          p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                          p: ({node, ...props}) => <p className="mb-3 leading-relaxed" {...props} />,
                           // Optimize list spacing
-                          ul: ({node, ...props}) => <ul className="mb-2 pl-5" {...props} />,
-                          li: ({node, ...props}) => <li className="mb-1" {...props} />
+                          ul: ({node, ...props}) => <ul className="mb-3 pl-5 list-disc" {...props} />,
+                          li: ({node, ...props}) => <li className="mb-1 pl-1" {...props} />,
+                          // Better heading spacing
+                          h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2 mt-3" {...props} />,
+                          h2: ({node, ...props}) => <h2 className="text-lg font-bold mb-2 mt-2 border-b pb-1 border-gray-200 dark:border-gray-700" {...props} />,
+                          h3: ({node, ...props}) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />
                         }}
                       >
                         {aiResponse.summary}
@@ -1058,7 +1092,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                     
                     {/* Full Analysis Section */}
                     <div>
-                      <h2 className="text-xl font-semibold mb-4">{t('fullAnalysis')}</h2>
+                      <h2 className="text-xl font-semibold mb-3">{t('fullAnalysis')}</h2>
                       <div className="description-text text-gray-700 dark:text-gray-300">
                         {!aiResponse.isComplete && (
                           <div className="flex items-center mb-2">
@@ -1068,19 +1102,25 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                             <span className="text-sm text-blue-500">{t('processingResponse')}</span>
                           </div>
                         )}
-                        <div className="prose prose-sm max-w-none">
+                        <div className="prose prose-sm max-w-none border border-gray-100 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800/50">
                           <ReactMarkdown 
                             remarkPlugins={[remarkGfm]}
                             components={{
                               // Override paragraph to reduce spacing
-                              p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                              p: ({node, ...props}) => <p className="mb-3 leading-relaxed" {...props} />,
                               // Optimize list spacing
-                              ul: ({node, ...props}) => <ul className="mb-2 pl-5" {...props} />,
-                              li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                              ul: ({node, ...props}) => <ul className="mb-3 pl-5 list-disc" {...props} />,
+                              li: ({node, ...props}) => <li className="mb-1 pl-1" {...props} />,
                               // Better heading spacing
-                              h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2 mt-4" {...props} />,
-                              h2: ({node, ...props}) => <h2 className="text-lg font-bold mb-2 mt-3" {...props} />,
-                              h3: ({node, ...props}) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />
+                              h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2 mt-3" {...props} />,
+                              h2: ({node, ...props}) => <h2 className="text-lg font-bold mb-2 mt-2 border-b pb-1 border-gray-200 dark:border-gray-700" {...props} />,
+                              h3: ({node, ...props}) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />,
+                              // Fix pre and code formatting
+                              pre: ({node, ...props}) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2 overflow-x-auto" {...props} />,
+                              code: ({node, inline, ...props}) => 
+                                inline ? 
+                                  <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} /> : 
+                                  <code {...props} />
                             }}
                           >
                             {aiResponse.content}
