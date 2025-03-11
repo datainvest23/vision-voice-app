@@ -156,7 +156,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     
     let isMounted = true; // Track component mount state
     const controller = new AbortController(); // Create new controller
-    let timeoutId: NodeJS.Timeout | null = null;
+    const timeoutId: NodeJS.Timeout | null = null;
     
     const processNextAudio = async () => {
       try {
@@ -238,12 +238,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     };
   }, [isProcessingAudio, audioQueue]);
 
-  // Add text to audio queue for processing (used when new chunks arrive)
-  const addToAudioQueue = (text: string) => {
-    if (!streamAudio || !text.trim()) return;
-    setAudioQueue(prev => [...prev, text]);
-  };
-
   // Manually play description (used for the play button)
   const playDescription = async (text: string) => {
     // If already playing, stop the current playback
@@ -273,6 +267,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       
       // Enqueue all chunks
       setAudioQueue(textChunks);
+      setIsPlaying(true);
     } catch (err) {
       console.error('Speech playback error:', err);
       setError('Failed to play audio description');
