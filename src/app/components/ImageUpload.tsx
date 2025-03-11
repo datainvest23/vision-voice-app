@@ -442,7 +442,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let streamedContent = '';
-        let lastProcessedChunk = '';
         
         console.log('Starting to stream Assistant response...');
         
@@ -499,9 +498,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           const chunk = decoder.decode(value, { stream: true });
           streamedContent += chunk;
           
-          // Store last processed chunk for context in future processing
-          lastProcessedChunk = chunk;
-          
           // Update the UI with the new content
           setAiResponse(prev => {
             if (!prev) return { content: streamedContent, isComplete: false };
@@ -523,102 +519,6 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Helper function to extract complete sentences from chunks with improved NLP
-  const extractSentences = (newText: string, previousContext: string = ''): string[] => {
-    const textToProcess = previousContext + newText;
-    
-    // Nothing to process
-    if (!textToProcess.trim()) {
-      return [];
-    }
-    
-    // Common abbreviations that contain periods but don't end sentences
-    const commonAbbreviations = [
-      'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Sr.', 'Jr.', 'St.',
-      'etc.', 'e.g.', 'i.e.', 'vs.', 'p.m.', 'a.m.', 'U.S.', 'U.K.',
-      // German
-      'bzw.', 'ca.', 'evtl.', 'ggf.', 'z.B.',
-      // Spanish
-      'Sr.', 'Sra.', 'Dr.', 'Dra.', 'Ud.', 'Uds.',
-      // French
-      'M.', 'Mme.', 'Mlle.', 'Dr.', 'St.'
-    ];
-    
-    // Regular expressions to match different types of sentence boundaries
-    const sentenceBoundaryRegex = new RegExp(
-      // Match end punctuation followed by space or quote
-      `([.!?]+['"])(?=\\s|$)` +
-      // Match end punctuation at end of string or followed by space
-      `|([.!?]+)(?=\\s|$)` +
-      // Match ellipsis followed by capital letter
-      `|(…\\s+)(?=[A-ZÀ-ÖØ-Þ])`,
-      'g'
-    );
-    
-    // First, handle special cases like abbreviations to avoid false sentence breaks
-    let processedText = textToProcess;
-    for (const abbr of commonAbbreviations) {
-      // Replace periods in abbreviations with a special marker
-      const pattern = new RegExp(`\\b${abbr.replace(/\./g, '\\.').replace(/\s/g, '\\s')}\\s`, 'g');
-      processedText = processedText.replace(pattern, (match) => match.replace('.', '###PERIOD###'));
-    }
-    
-    // Find all sentence boundaries in the processed text
-    const matches = [...processedText.matchAll(sentenceBoundaryRegex)];
-    
-    // For minimal text or no matches, just return as a single chunk
-    if (matches.length === 0 || textToProcess.length < 30) {
-      return [textToProcess];
-    }
-    
-    const sentences: string[] = [];
-    let lastIndex = 0;
-    
-    // Extract each sentence using the original text (not processed text)
-    for (const match of matches) {
-      if (match.index !== undefined) {
-        const sentenceEnd = match.index + match[0].length;
-        
-        // Get the raw sentence from original text
-        const sentence = textToProcess.substring(lastIndex, sentenceEnd);
-        
-        // Check if sentence appears to be incomplete (heuristic)
-        const wordCount = sentence.split(/\s+/).length;
-        const hasQuotationBalance = (sentence.match(/"/g) || []).length % 2 === 0;
-        const hasParenthesisBalance = 
-          (sentence.match(/\(/g) || []).length === (sentence.match(/\)/g) || []).length;
-        
-        // If the sentence seems incomplete or too short, and we have more text, keep it for the next round
-        if ((wordCount < 3 || !hasQuotationBalance || !hasParenthesisBalance) && 
-            matches.length > 1 && match !== matches[matches.length - 1]) {
-          continue;
-        }
-        
-        sentences.push(sentence);
-        lastIndex = sentenceEnd;
-      }
-    }
-    
-    // Add any remaining text as the final chunk
-    if (lastIndex < textToProcess.length) {
-      const remainingText = textToProcess.substring(lastIndex);
-      // Only add non-trivial remaining text
-      if (remainingText.trim().length > 0) {
-        sentences.push(remainingText);
-      }
-    }
-    
-    // If we couldn't extract any valid sentences, return the whole text
-    if (sentences.length === 0) {
-      return [textToProcess];
-    }
-    
-    // Restore any abbreviation periods we masked
-    return sentences.map(sentence => 
-      sentence.replace(/###PERIOD###/g, '.')
-    );
   };
 
   const handleTranscriptionComplete = (transcribedText: string) => {
