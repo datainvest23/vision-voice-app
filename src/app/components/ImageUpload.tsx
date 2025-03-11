@@ -1055,7 +1055,13 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                           // Better heading spacing
                           h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2 mt-3" {...props} />,
                           h2: ({node, ...props}) => <h2 className="text-lg font-bold mb-2 mt-2 border-b pb-1 border-gray-200 dark:border-gray-700" {...props} />,
-                          h3: ({node, ...props}) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />
+                          h3: ({node, ...props}) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />,
+                          // Fix pre and code formatting
+                          pre: ({node, ...props}) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2 overflow-x-auto" {...props} />,
+                          code: ({...props}) => {
+                            const {children} = props;
+                            return <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} />;
+                          }
                         }}
                       >
                         {aiResponse.summary}
@@ -1117,10 +1123,10 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                               h3: ({node, ...props}) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />,
                               // Fix pre and code formatting
                               pre: ({node, ...props}) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2 overflow-x-auto" {...props} />,
-                              code: ({node, inline, ...props}) => 
-                                inline ? 
-                                  <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} /> : 
-                                  <code {...props} />
+                              code: ({...props}) => {
+                                const {children} = props;
+                                return <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} />;
+                              }
                             }}
                           >
                             {aiResponse.content}
