@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
               thread.id,
               {
                 assistant_id: process.env.OPENAI_ASSISTANT_ID!,
-                model: "gpt-4o-mini", // Explicitly use gpt-4o-mini as requested
+                model: "gpt-4o", // Explicitly use gpt-4o-mini as requested? CHANGED TO 
               }
             );
             

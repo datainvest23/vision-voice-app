@@ -32,14 +32,14 @@ export default function Home() {
       {/* Added top padding for fixed navbar */}
       <div className="w-full p-6 pt-20">
         {/* Language Selector in top-right corner */}
-        <div className="w-full max-w-[2000px] flex justify-end mb-4">
+        <div className="w-full max-w-[2000px] flex justify-end mb-2">
           <LanguageSelector />
         </div>
         
-        <div className="w-full max-w-[2000px] space-y-10">
-          {/* Logo and Title Section */}
-          <div className="flex flex-col items-center text-center">
-            <div className="mb-6 w-64 h-64 relative">
+        <div className="w-full max-w-[2000px] space-y-6">
+          {/* Logo Section */}
+          <div className="flex flex-col items-center">
+            <div className="w-40 h-40 relative">
               <Image 
                 src="/aa_logo.png" 
                 alt="Antiques Appraisal Logo" 
@@ -48,12 +48,6 @@ export default function Home() {
                 className="object-contain"
               />
             </div>
-            <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-500">
-              {t('title')}
-            </h1>
-            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-              {t('subtitle')}
-            </p>
           </div>
           
           {/* Upload Section */}

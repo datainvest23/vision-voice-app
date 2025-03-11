@@ -779,23 +779,75 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         
         .typing-indicator::before {
           left: 0;
-          animation-delay: 0.2s;
-        }
-        
-        .typing-indicator span {
-          left: 7px;
-          animation-delay: 0.4s;
+          animation-delay: 0s;
         }
         
         .typing-indicator::after {
-          left: 14px;
+          left: 8px;
+          animation-delay: 0.3s;
+        }
+        
+        .typing-indicator span {
+          left: 16px;
           animation-delay: 0.6s;
         }
         
         @keyframes typing {
-          0% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
-          100% { transform: translateY(0); }
+          0%, 100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-5px);
+          }
+        }
+        
+        .grid-layout {
+          display: grid;
+          grid-template-columns: 1fr 2fr;
+          gap: 1.5rem;
+          width: 100%;
+        }
+        
+        /* Improved responsive layout */
+        @media (max-width: 768px) {
+          .grid-layout {
+            grid-template-columns: 1fr;
+          }
+        }
+        
+        .images-container {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+        
+        .image-container {
+          border-radius: 0.5rem;
+          overflow: hidden;
+          position: relative;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .selected-image {
+          width: 100%;
+          height: auto;
+          object-fit: contain;
+          border-radius: 0.375rem;
+          background-color: #f8f9fa;
+        }
+        
+        /* Optimize text for better readability */
+        .description-text {
+          line-height: 1.5;
+          letter-spacing: 0.01em;
+        }
+        
+        /* Make sure content doesn't overflow container */
+        .content-container {
+          width: 100%;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+          hyphens: auto;
         }
       `}</style>
       
@@ -954,6 +1006,31 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                 )}
               </div>
 
+              {/* Add Summary below images when available */}
+              {aiResponse && aiResponse.summary && (
+                <div className="mt-6 mb-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <h2 className="text-xl font-semibold">{t('summary')}</h2>
+                  </div>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                    <div className="text-gray-800 dark:text-gray-200 prose prose-sm max-w-none">
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          // Override paragraph to reduce spacing
+                          p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                          // Optimize list spacing
+                          ul: ({node, ...props}) => <ul className="mb-2 pl-5" {...props} />,
+                          li: ({node, ...props}) => <li className="mb-1" {...props} />
+                        }}
+                      >
+                        {aiResponse.summary}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {aiResponse && (
                 <div className="card">
                   <button
@@ -977,21 +1054,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
               {aiResponse && (
                 <div className="card">
                   <div className="text-container">
-                    {/* Summary Section */}
-                    {aiResponse.summary && (
-                      <div className="mb-8">
-                        <div className="flex justify-between items-center mb-4">
-                          <h2 className="text-xl font-semibold">{t('summary')}</h2>
-                        </div>
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
-                          <div className="text-gray-800 dark:text-gray-200 italic">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {aiResponse.summary}
-                            </ReactMarkdown>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    {/* Summary Section moved to left column */}
                     
                     {/* Full Analysis Section */}
                     <div>
@@ -1005,32 +1068,27 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                             <span className="text-sm text-blue-500">{t('processingResponse')}</span>
                           </div>
                         )}
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {aiResponse.content}
-                        </ReactMarkdown>
+                        <div className="prose prose-sm max-w-none">
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              // Override paragraph to reduce spacing
+                              p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                              // Optimize list spacing
+                              ul: ({node, ...props}) => <ul className="mb-2 pl-5" {...props} />,
+                              li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                              // Better heading spacing
+                              h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2 mt-4" {...props} />,
+                              h2: ({node, ...props}) => <h2 className="text-lg font-bold mb-2 mt-3" {...props} />,
+                              h3: ({node, ...props}) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />
+                            }}
+                          >
+                            {aiResponse.content}
+                          </ReactMarkdown>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {aiResponse && aiResponse.isComplete && !isReadyToSubmit && !isSubmitted && (
-                <div className="mt-8">
-                  {isAwaitingResponse ? (
-                    <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded relative mb-4">
-                      <div className="flex items-center">
-                        <div className="typing-indicator mr-2">
-                          <span></span>
-                        </div>
-                        <span>{t('processingComment')}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <AudioRecorder 
-                      onTranscriptionComplete={handleTranscriptionComplete} 
-                      language={language}
-                    />
-                  )}
                 </div>
               )}
 
@@ -1060,6 +1118,37 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           </div>
         </div>
       )}
+
+      {/* Footer Record Comment Button */}
+      {aiResponse && aiResponse.isComplete && !isReadyToSubmit && !isSubmitted && (
+        <div className="fixed bottom-0 left-0 right-0 py-4 px-6 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg z-10">
+          <div className="container mx-auto max-w-[2000px] flex justify-center">
+            {isAwaitingResponse ? (
+              <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-6 py-4 rounded-lg">
+                <div className="flex items-center justify-center">
+                  <div className="typing-indicator mr-2">
+                    <span></span>
+                  </div>
+                  <span className="font-medium">{t('processingComment')}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full max-w-md">
+                <AudioRecorder 
+                  onTranscriptionComplete={handleTranscriptionComplete} 
+                  language={language}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Spacer for fixed footer */}
+      {aiResponse && aiResponse.isComplete && !isReadyToSubmit && !isSubmitted && (
+        <div className="h-28 w-full"></div>
+      )}
+      
       {error && (
         <div className="fixed bottom-4 left-4 right-4 p-6 bg-red-50 dark:bg-red-900/50 text-red-600 dark:text-red-200 rounded-xl text-lg shadow-lg max-w-2xl mx-auto">
           {error}
