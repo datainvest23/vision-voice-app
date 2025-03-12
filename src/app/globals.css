@@ -81,6 +81,14 @@ body {
     transition-transform cursor-pointer;
 }
 
+/* New larger homepage upload button */
+.upload-button-home {
+  @apply bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-6 px-10 
+    rounded-xl shadow-xl flex items-center justify-center transform hover:scale-105 
+    transition-all duration-300 cursor-pointer w-full max-w-md mx-auto;
+  min-width: 280px;
+}
+
 .upload-container {
   @apply flex justify-center items-center p-4;
 }
@@ -190,6 +198,12 @@ body {
 .upload-option-button {
   @apply font-bold py-4 px-6 rounded-lg shadow-lg flex items-center justify-center 
     transform hover:scale-105 transition-transform w-full;
+}
+
+/* New larger option buttons for homepage */
+.upload-option-button-home {
+  @apply font-bold py-5 px-8 rounded-xl shadow-lg flex items-center justify-center 
+    transform hover:scale-105 transition-all duration-300 w-full;
 }
 
 .images-container {

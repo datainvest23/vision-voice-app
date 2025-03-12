@@ -285,61 +285,130 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     }
   };
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
+  // Add useEffect to log important state changes and debug issues
+  useEffect(() => {
+    console.log('ImageUpload component mounted');
     
+    // Cleanup function when component unmounts
+    return () => {
+      console.log('ImageUpload component unmounted');
+      // Release any object URLs to prevent memory leaks
+      selectedImages.forEach(url => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, [selectedImages]);
+
+  // Completely rewrite the handleImageUpload function to be more robust
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    console.log('🔄 handleImageUpload triggered');
+    
+    const files = event.target.files;
+    if (!files || files.length === 0) {
+      console.log('❌ No files selected');
+      return;
+    }
+    
+    console.log(`✅ ${files.length} files selected`);
+    
+    // Show loading state
     setIsLoading(true);
     setError('');
-    setCompressionStatus('');
     
     try {
-      // Create new arrays with existing images and new images
-      const newImageUrls = [...selectedImages];
-      const newFiles = [...selectedFiles];
+      // Create new arrays for images and files
+      const currentImageUrls = [...selectedImages];
+      const currentFiles = [...selectedFiles];
+      let newImagesAdded = 0;
       
-      // Process each file (up to 3 total)
+      // Process each file
       for (let i = 0; i < files.length; i++) {
-        if (newFiles.length >= 3) {
-          setError("Maximum of 3 images allowed");
+        // Check if we've reached the maximum
+        if (currentFiles.length + newImagesAdded >= 3) {
+          setError('Maximum of 3 images allowed');
           break;
         }
         
         const file = files[i];
-        let processedFile = file;
+        console.log(`🔄 Processing file: ${file.name} (${formatFileSize(file.size)})`);
         
-        // Only compress if file is over 900KB
+        // Process file (compression if needed)
+        let processedFile = file;
         if (file.size > 900 * 1024) {
+          setCompressionStatus(`Optimizing image ${i + 1}/${Math.min(files.length, 3 - currentFiles.length)}...`);
           try {
-            setCompressionStatus(`Optimizing image ${i + 1}/${files.length}...`);
             processedFile = await compressImage(file);
-            console.log(`Compressed image from ${formatFileSize(file.size)} to ${formatFileSize(processedFile.size)}`);
-          } catch (compressionError) {
-            console.error('Compression error:', compressionError);
-            // Continue with original file if compression fails
-            setError(`Image optimization failed. Using original image (${formatFileSize(file.size)}).`);
+            console.log(`📊 Compressed from ${formatFileSize(file.size)} to ${formatFileSize(processedFile.size)}`);
+          } catch (error) {
+            console.error('❌ Compression error:', error);
+            processedFile = file; // Use original on error
           } finally {
             setCompressionStatus('');
           }
         }
         
+        // Create URL and add to arrays
         const imageUrl = URL.createObjectURL(processedFile);
-        newImageUrls.push(imageUrl);
-        newFiles.push(processedFile);
+        currentImageUrls.push(imageUrl);
+        currentFiles.push(processedFile);
+        newImagesAdded++;
+        
+        console.log(`✅ Added image ${newImagesAdded}: ${imageUrl.substring(0, 30)}...`);
       }
       
-      setSelectedImages(newImageUrls);
-      setSelectedFiles(newFiles);
+      console.log(`📊 Final count - Images: ${currentImageUrls.length}, Files: ${currentFiles.length}`);
       
-      // Don't automatically process images with API after upload
-      // Let the user decide when to analyze after they've added all desired images
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process image');
-    } finally {
-      setIsLoading(false);
+      // Update state atomically
+      setSelectedImages(currentImageUrls);
+      setSelectedFiles(currentFiles);
+      
+      // Reset file input
+      if (event.target) {
+        event.target.value = '';
+      }
+      
+      // Done with options when files are added
       setShowUploadOptions(false);
+      
+    } catch (error) {
+      console.error('❌ Error in handleImageUpload:', error);
+      setError(error instanceof Error ? error.message : 'Failed to process images');
+    } finally {
+      console.log('🏁 Upload handling complete');
+      setIsLoading(false);
     }
   };
+  
+  // Modify the handleChooseFile function to ensure it works correctly
+  const handleChooseFile = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('🔄 handleChooseFile clicked');
+    if (fileInputRef.current) {
+      console.log('✅ Triggering file input click');
+      fileInputRef.current.click();
+    } else {
+      console.log('❌ fileInputRef is null');
+    }
+  };
+
+  // Add useEffect to log state changes
+  useEffect(() => {
+    console.log("selectedImages changed:", selectedImages.length);
+  }, [selectedImages]);
+
+  useEffect(() => {
+    console.log("selectedFiles changed:", selectedFiles.length);
+  }, [selectedFiles]);
+
+  useEffect(() => {
+    console.log("showUploadOptions changed:", showUploadOptions);
+  }, [showUploadOptions]);
 
   // Modified API processing function to handle streaming and concurrent audio
   const processImageWithAPI = async (file: File) => {
@@ -597,6 +666,10 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
             }
           }
           
+          // Set isReadyToSubmit to true after receiving and processing the second message
+          // This will allow the "Create Valuation" button to be shown
+          setIsReadyToSubmit(true);
+          
           break;
         }
         
@@ -618,21 +691,26 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     }
   };
 
-  const saveToAirtable = async () => {
+  // Save to Supabase function
+  const saveToSupabase = async () => {
     try {
       setError('');
       setIsLoading(true);
 
-      // Save all data to Airtable
-      const response = await fetch('/api/save-record', {
+      // Save all data to Supabase
+      const response = await fetch('/api/save-to-supabase', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          images: selectedFiles, // Use the already processed/compressed images
-          description: aiResponse?.content,
+          images: selectedImages,
+          fullDescription: aiResponse?.content || '',
+          summary: aiResponse?.summary,
           userComment: transcription,
+          assistantResponse: aiResponse?.content || '',
+          assistantFollowUp: aiResponse?.content, // This is the second response after user comment
+          title: `Antique Valuation ${new Date().toLocaleDateString()}`
         }),
       });
 
@@ -651,8 +729,8 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     }
   };
 
-  const handleSaveToAirtable = async () => {
-    await saveToAirtable();
+  const handleSaveToDatabase = async () => {
+    await saveToSupabase();
   };
 
   const handleAddNew = () => {
@@ -681,19 +759,15 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     });
   };
 
-  const handleUploadOptionClick = () => {
+  const handleUploadOptionClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
     setShowUploadOptions(true);
   };
 
-  const handleTakePhoto = () => {
+  const handleTakePhoto = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
     if (cameraInputRef.current) {
       cameraInputRef.current.click();
-    }
-  };
-
-  const handleChooseFile = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
     }
   };
 
@@ -756,140 +830,14 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 
   return (
     <div className="flex flex-col items-center relative w-full">
-      <style jsx>{`
-        .typing-indicator {
-          display: inline-block;
-          position: relative;
-          width: 20px;
-          height: 10px;
-        }
-        
-        .typing-indicator::before,
-        .typing-indicator::after,
-        .typing-indicator span {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          width: 5px;
-          height: 5px;
-          border-radius: 50%;
-          background-color: #3b82f6;
-          animation: typing 1s infinite ease-in-out;
-        }
-        
-        .typing-indicator::before {
-          left: 0;
-          animation-delay: 0s;
-        }
-        
-        .typing-indicator::after {
-          left: 8px;
-          animation-delay: 0.3s;
-        }
-        
-        .typing-indicator span {
-          left: 16px;
-          animation-delay: 0.6s;
-        }
-        
-        @keyframes typing {
-          0%, 100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-5px);
-          }
-        }
-        
-        .grid-layout {
-          display: grid;
-          grid-template-columns: minmax(200px, 1fr) 3fr;
-          gap: 1.5rem;
-          width: 100%;
-        }
-        
-        /* Improved responsive layout */
-        @media (max-width: 768px) {
-          .grid-layout {
-            grid-template-columns: 1fr;
-          }
-        }
-        
-        .images-container {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        
-        .image-container {
-          border-radius: 0.5rem;
-          overflow: hidden;
-          position: relative;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          max-height: 120px;
-          width: 100%;
-        }
-        
-        .selected-image {
-          width: 100%;
-          height: auto;
-          object-fit: contain;
-          border-radius: 0.375rem;
-          background-color: #f8f9fa;
-          max-height: 120px;
-        }
-        
-        /* Optimize text for better readability */
-        .description-text {
-          line-height: 1.5;
-          letter-spacing: 0.01em;
-        }
-        
-        /* Make sure content doesn't overflow container */
-        .content-container {
-          width: 100%;
-          overflow-wrap: break-word;
-          word-wrap: break-word;
-          hyphens: auto;
-          padding: 0.5rem;
-        }
-        
-        /* Fix spacing in markdown content */
-        .prose {
-          font-size: 1rem;
-          line-height: 1.5;
-        }
-        
-        .prose h2 {
-          margin-top: 1.5rem;
-          margin-bottom: 0.75rem;
-          font-weight: 600;
-          font-size: 1.25rem;
-        }
-        
-        .prose p {
-          margin-bottom: 1rem;
-        }
-        
-        .prose ul {
-          margin-bottom: 1rem;
-          padding-left: 1.5rem;
-        }
-        
-        .prose li + li {
-          margin-top: 0.25rem;
-        }
-      `}</style>
-      
-      {compressionStatus && (
-        <div className="mb-2 text-sm text-gray-500 flex items-center">
-          <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          {compressionStatus}
-        </div>
-      )}
+      {/* Debug info */}
+      <div className="bg-gray-100 p-2 mb-4 w-full text-xs">
+        <div>Selected Images Count: {selectedImages.length}</div>
+        <div>Selected Files Count: {selectedFiles.length}</div>
+        <div>Show Upload Options: {showUploadOptions ? 'true' : 'false'}</div>
+      </div>
+
+      {/* Hidden file inputs */}
       <input
         ref={fileInputRef}
         type="file"
@@ -907,15 +855,17 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         className="hidden"
       />
 
-      {selectedImages.length === 0 && (
+      {/* Main content based on state */}
+      {selectedImages.length === 0 ? (
         <div className="flex flex-col items-center justify-center w-full">
           {!showUploadOptions ? (
             <button 
               onClick={handleUploadOptionClick}
-              className="upload-button"
+              className="upload-button-home"
+              type="button"
             >
-              <span className="flex items-center text-base">
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span className="flex items-center text-xl">
+                <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                     d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
@@ -926,47 +876,38 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
             <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
               <button 
                 onClick={handleTakePhoto} 
-                className="upload-option-button bg-blue-500 hover:bg-blue-600 text-white"
+                className="upload-option-button-home bg-blue-500 hover:bg-blue-600 text-white"
+                type="button"
               >
-                <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                     d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                     d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                {t('takePhoto')}
+                <span className="text-lg">{t('takePhoto')}</span>
               </button>
               <button 
                 onClick={handleChooseFile} 
-                className="upload-option-button bg-purple-500 hover:bg-purple-600 text-white"
+                className="upload-option-button-home bg-purple-500 hover:bg-purple-600 text-white"
+                type="button"
               >
-                <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                     d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                {t('uploadImage')}
-              </button>
-            </div>
-          )}
-          
-          {selectedImages.length < 3 && selectedImages.length > 0 && (
-            <div className="mt-4">
-              <button 
-                onClick={handleUploadOptionClick}
-                className="text-blue-500 hover:text-blue-700 font-medium"
-              >
-                {t('addAnother')} ({3 - selectedImages.length} {t('remaining')})
+                <span className="text-lg">{t('uploadImage')}</span>
               </button>
             </div>
           )}
         </div>
-      )}
-
-      {selectedImages.length > 0 && (
+      ) : (
         <div className="w-full">
+          {/* Show images */}
           <div className="grid-layout">
             <div className="flex flex-col space-y-4">
               <div className="images-container">
+                {/* Image thumbnails */}
                 {selectedImages.map((imageUrl, index) => (
                   <div key={index} className="image-container relative">
                     <NextImage 
@@ -980,223 +921,44 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                     <button 
                       className="absolute top-1 right-1 bg-red-500 rounded-full p-1 text-white"
                       onClick={() => handleRemoveImage(index)}
+                      type="button"
                     >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
-                    {selectedFiles[index] && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1">
-                        {selectedFiles[index].name.includes('compressed_') ? (
-                          <span className="flex items-center">
-                            <svg className="w-3 h-3 mr-1 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Compressed: {formatFileSize(selectedFiles[index].size)}
-                          </span>
-                        ) : (
-                          <span>{formatFileSize(selectedFiles[index].size)}</span>
-                        )}
-                      </div>
-                    )}
                   </div>
                 ))}
-                
-                {selectedImages.length < 3 && (
-                  <button
-                    onClick={() => {
-                      setShowUploadOptions(true);
-                    }}
-                    className="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded shadow"
-                  >
-                    <div className="flex items-center">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      {t('addAnotherImage')}
-                    </div>
-                  </button>
-                )}
-                
-                {/* Analyze button to process images after all uploads are complete */}
-                {selectedFiles.length > 0 && !aiResponse && (
-                  <div className="mt-6 mb-4">
-                    <button
-                      onClick={() => processImageWithAPI(selectedFiles[0])}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-6 rounded-lg shadow-lg text-lg transition-colors duration-200"
-                    >
-                      <div className="flex items-center justify-center">
-                        <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        {t('analyzeImages')}
-                      </div>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Add Summary below images when available */}
-              {aiResponse && aiResponse.summary && (
-                <div className="mt-4 mb-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <h2 className="text-xl font-semibold">{t('summary')}</h2>
-                  </div>
-                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
-                    <div className="text-gray-800 dark:text-gray-200 prose prose-sm max-w-none">
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          // Override paragraph to reduce spacing
-                          p: ({node, ...props}) => <p className="mb-3 leading-relaxed" {...props} />,
-                          // Optimize list spacing
-                          ul: ({node, ...props}) => <ul className="mb-3 pl-5 list-disc" {...props} />,
-                          li: ({node, ...props}) => <li className="mb-1 pl-1" {...props} />,
-                          // Better heading spacing
-                          h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2 mt-3" {...props} />,
-                          h2: ({node, ...props}) => <h2 className="text-lg font-bold mb-2 mt-2 border-b pb-1 border-gray-200 dark:border-gray-700" {...props} />,
-                          h3: ({node, ...props}) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />,
-                          // Fix pre and code formatting
-                          pre: ({node, ...props}) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2 overflow-x-auto" {...props} />,
-                          code: ({...props}) => {
-                            const {children} = props;
-                            return <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} />;
-                          }
-                        }}
-                      >
-                        {aiResponse.summary}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {aiResponse && (
-                <div className="card">
-                  <button
-                    onClick={() => {
-                      setShowUploadOptions(true);
-                    }}
-                    className="mb-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded shadow"
-                  >
-                    <div className="flex items-center">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      {t('addAnotherImage')}
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="content-container">
-              {aiResponse && (
-                <div className="card">
-                  <div className="text-container">
-                    {/* Summary Section moved to left column */}
-                    
-                    {/* Full Analysis Section */}
-                    <div>
-                      <h2 className="text-xl font-semibold mb-3">{t('fullAnalysis')}</h2>
-                      <div className="description-text text-gray-700 dark:text-gray-300">
-                        {!aiResponse.isComplete && (
-                          <div className="flex items-center mb-2">
-                            <div className="typing-indicator mr-2">
-                              <span></span>
-                            </div>
-                            <span className="text-sm text-blue-500">{t('processingResponse')}</span>
-                          </div>
-                        )}
-                        <div className="prose prose-sm max-w-none border border-gray-100 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800/50">
-                          <ReactMarkdown 
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              // Override paragraph to reduce spacing
-                              p: ({node, ...props}) => <p className="mb-3 leading-relaxed" {...props} />,
-                              // Optimize list spacing
-                              ul: ({node, ...props}) => <ul className="mb-3 pl-5 list-disc" {...props} />,
-                              li: ({node, ...props}) => <li className="mb-1 pl-1" {...props} />,
-                              // Better heading spacing
-                              h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2 mt-3" {...props} />,
-                              h2: ({node, ...props}) => <h2 className="text-lg font-bold mb-2 mt-2 border-b pb-1 border-gray-200 dark:border-gray-700" {...props} />,
-                              h3: ({node, ...props}) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />,
-                              // Fix pre and code formatting
-                              pre: ({node, ...props}) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2 overflow-x-auto" {...props} />,
-                              code: ({...props}) => {
-                                const {children} = props;
-                                return <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} />;
-                              }
-                            }}
-                          >
-                            {aiResponse.content}
-                          </ReactMarkdown>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="card">
-                {isReadyToSubmit && !isSubmitted && (
-                  <button 
-                    onClick={handleSaveToAirtable} 
-                    className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-5 px-10 rounded-xl text-xl shadow-lg transform hover:scale-105 transition-transform"
-                  >
-                    {t('saveToDatabase')}
-                  </button>
-                )}
-
-                {isSubmitted && (
-                  <div className="text-center">
-                    <div className="text-green-500 text-xl mb-6">{t('successfullySaved')}</div>
-                    <button 
-                      onClick={handleAddNew} 
-                      className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-5 px-10 rounded-xl text-xl shadow-lg transform hover:scale-105 transition-transform"
-                    >
-                      {t('addNewImage')}
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Footer Record Comment Button */}
-      {aiResponse && aiResponse.isComplete && !isReadyToSubmit && !isSubmitted && (
-        <div className="fixed bottom-0 left-0 right-0 py-4 px-6 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg z-10">
-          <div className="container mx-auto max-w-[2000px] flex justify-center">
-            {isAwaitingResponse ? (
-              <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-6 py-4 rounded-lg">
+          
+          {/* Analyze button */}
+          {selectedFiles.length > 0 && !aiResponse && (
+            <div className="mt-8 mb-8 flex justify-center">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  processImageWithAPI(selectedFiles[0]);
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white font-semibold py-5 px-12 rounded-lg shadow-lg text-xl transition-all duration-200 max-w-md w-full transform hover:scale-105"
+                type="button"
+              >
                 <div className="flex items-center justify-center">
-                  <div className="typing-indicator mr-2">
-                    <span></span>
-                  </div>
-                  <span className="font-medium">{t('processingComment')}</span>
+                  <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {t('analyzeImages')}
                 </div>
-              </div>
-            ) : (
-              <div className="w-full max-w-md">
-                <AudioRecorder 
-                  onTranscriptionComplete={handleTranscriptionComplete} 
-                  language={language}
-                />
-              </div>
-            )}
-          </div>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Spacer for fixed footer */}
-      {aiResponse && aiResponse.isComplete && !isReadyToSubmit && !isSubmitted && (
-        <div className="h-28 w-full"></div>
-      )}
-      
+      {/* Show errors */}
       {error && (
-        <div className="fixed bottom-4 left-4 right-4 p-6 bg-red-50 dark:bg-red-900/50 text-red-600 dark:text-red-200 rounded-xl text-lg shadow-lg max-w-2xl mx-auto">
+        <div className="mt-4 p-4 bg-red-50 text-red-600 rounded-lg">
           {error}
         </div>
       )}

@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       });
 
       const summary = completion.choices[0]?.message?.content || '';
-      
+
       // Return the summary
       return NextResponse.json({ summary }, { status: 200 });
     } catch (error) {
@@ -87,11 +87,11 @@ export async function POST(request: NextRequest) {
       // Create a simple fallback summary from the first few sentences
       const sentences = text.split(/[.!?]+\s+/);
       const fallbackSummary = sentences.slice(0, 3).join('. ') + (sentences.length > 3 ? '...' : '');
-      
-      return NextResponse.json(
+        
+        return NextResponse.json(
         { summary: fallbackSummary, error: 'Failed to generate summary, using fallback' },
         { status: 200 }
-      );
+        );
     }
   } catch (error: unknown) {
     console.error('Summarization error:', error);

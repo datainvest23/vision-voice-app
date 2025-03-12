@@ -154,7 +154,8 @@ export async function POST(request: NextRequest) {
                 assistant_id: process.env.OPENAI_ASSISTANT_ID!,
                 instructions: `Analyze the provided antique item image(s) in ${language}. 
                   Focus on historical context, materials, style, and notable features.
-                  Provide a detailed analysis that can later be summarized.`
+                  Provide a detailed analysis that can later be summarized.
+                  End your response with 2-3 specific questions to the user about the item, which could help you clear any doubts and make a better assessment of the object and its value. These questions should focus on aspects that are not clearly visible in the images or details that would enhance your appraisal.`
               }
             );
             

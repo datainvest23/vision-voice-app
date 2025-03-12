@@ -51,9 +51,16 @@ export async function POST(request: NextRequest) {
             threadId,
             {
               assistant_id: process.env.OPENAI_ASSISTANT_ID!,
-              instructions: `Continue the conversation in ${language}. 
-                Respond to the user's comment about the antique item.
-                Include any additional insights or information based on their feedback.`
+              instructions: `Continue the conversation in ${language}.
+                Include the user's comments and review your initial analysis of the item.
+                Create an updated, elaborated and complete valuation report that incorporates any new information provided by the user.
+                Your updated valuation report should be comprehensive, addressing:
+                - Historical context and provenance
+                - Materials and craftsmanship
+                - Condition assessment
+                - Stylistic elements and artistic significance
+                - Market value range and factors affecting value
+                - Authenticity considerations`
             }
           );
           
