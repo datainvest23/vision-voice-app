@@ -1,10 +1,9 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import ImageUpload from './components/ImageUpload';
 import LanguageSelector from './components/LanguageSelector';
 import NavBar from './components/NavBar';
-import { useState } from 'react';
 import { useLanguage } from './context/LanguageContext';
 import { useAuth } from './context/AuthContext';
 import SimpleImageUpload from './components/SimpleImageUpload';
@@ -12,10 +11,20 @@ import SimpleImageUpload from './components/SimpleImageUpload';
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const { t } = useLanguage();
-  const { isLoading: authLoading } = useAuth(); // Remove 'user'
-
+  const { isLoading: authLoading } = useAuth();
+  
+  // Define a test mode flag
+  const testMode = true;
+  
   // Add console log to track re-renders
   console.log("Home component rendering");
+  
+  // Move useEffect here, before any conditional returns
+  useEffect(() => {
+    console.log('Main page component rendered');
+    console.log('isLoading:', isLoading);
+    console.log('testMode:', testMode);
+  }, [isLoading, testMode]);
 
   // If auth is loading, show a loading indicator
   if (authLoading) {
@@ -25,9 +34,6 @@ export default function Home() {
       </div>
     );
   }
-
-  // Define a test mode flag
-  const testMode = true;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 
@@ -60,12 +66,12 @@ export default function Home() {
           {/* Upload Section - Removed frame/border and simplified to just the component */}
           <div className="w-full max-w-lg">
             {isLoading ? (
-              <div className="p-8 bg-white/80 dark:bg-gray-800/80 rounded-xl shadow-lg flex flex-col items-center justify-center z-10 backdrop-blur-sm">
-                <div className="loader mb-4"></div>
-                <p className="text-lg text-gray-600 dark:text-gray-300">{t('processingImage')}</p>
+              <div className="loading-container">
+                <div className="loading-spinner"></div>
+                <div className="loading-text">Analyzing your antique...</div>
               </div>
             ) : (
-              testMode ? <SimpleImageUpload setIsLoading={setIsLoading} /> : <ImageUpload setIsLoading={setIsLoading} />
+              <SimpleImageUpload setIsLoading={setIsLoading} />
             )}
           </div>
         </div>

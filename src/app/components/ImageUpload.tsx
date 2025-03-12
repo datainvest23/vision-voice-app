@@ -145,48 +145,48 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
           setIsProcessingAudio(false);
           return;
         }
-
+        
         console.log('Sending text to TTS API...');
         
         // Use the controller.signal in your fetch calls
-        const response = await fetch('/api/text-to-speech', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          const response = await fetch('/api/text-to-speech', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
           body: JSON.stringify({ text: textToProcess }),
-          signal: controller.signal
-        });
-
-        if (!response.ok) {
+            signal: controller.signal
+          });
+          
+          if (!response.ok) {
           throw new Error(`Text-to-speech request failed with status: ${response.status}`);
-        }
-
-        const audioBlob = await response.blob();
-        
+          }
+          
+          const audioBlob = await response.blob();
+          
         // Check if component is still mounted before proceeding
-        if (!isMounted) {
+          if (!isMounted) {
           console.log('Component unmounted after fetch, aborting audio playback');
-          return;
-        }
-
+            return;
+          }
+          
         console.log('Creating audio from blob...');
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-        currentAudioRef.current = audio;
-
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          currentAudioRef.current = audio;
+          
         // Debug audio data
         console.log(`Audio blob type: ${audioBlob.type}, size: ${audioBlob.size} bytes`);
         
         // Add error handler
-        audio.onerror = (e) => {
-          console.error('Audio playback error:', e);
-          if (isMounted) {
+          audio.onerror = (e) => {
+            console.error('Audio playback error:', e);
+            if (isMounted) {
             setError('Failed to play audio. Please try again.');
-            setIsProcessingAudio(false);
-          }
-        };
-        
+              setIsProcessingAudio(false);
+            }
+          };
+          
         // Add ended handler
         audio.onended = () => {
           console.log('Audio playback completed');
@@ -242,10 +242,10 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
       
       try {
         // Abort any ongoing fetch requests
-        controller.abort();
-        
+          controller.abort();
+      
         // Clean up any ongoing audio playback
-        if (currentAudioRef.current) {
+      if (currentAudioRef.current) {
           currentAudioRef.current.pause();
           currentAudioRef.current = null;
         }
@@ -259,7 +259,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const playDescription = async (_: string) => {
     console.log("Audio playback functionality disabled as requested");
     // Implementation removed to disable audio playback
-    return;
+      return;
   };
 
   // Toggle streaming audio on/off
@@ -504,9 +504,9 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         
         // Manual stream processing
         while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
             console.log('Stream complete');
             
             // Final update with complete flag
@@ -517,44 +517,44 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
             
             // STEP 3: Generate summary with GPT-4o-mini
             // ----------------------------------------
-            if (streamedContent && streamedContent.trim()) {
+              if (streamedContent && streamedContent.trim()) {
               console.log(`Generating summary for ${streamedContent.length} chars...`);
-              
-              // Run summarization in a separate try-catch to isolate errors
-              try {
-                const summarizedText = await getSummary(streamedContent);
                 
-                if (summarizedText && summarizedText.trim()) {
-                  console.log(`Received summary (${summarizedText.length} chars)`);
+                // Run summarization in a separate try-catch to isolate errors
+                try {
+                  const summarizedText = await getSummary(streamedContent);
                   
-                  // Update state with the summary
-                  setAiResponse(prev => {
-                    if (!prev) return { content: streamedContent, isComplete: true, summary: summarizedText };
-                    return { ...prev, summary: summarizedText };
-                  });
-                  
+                  if (summarizedText && summarizedText.trim()) {
+                    console.log(`Received summary (${summarizedText.length} chars)`);
+                    
+                    // Update state with the summary
+                    setAiResponse(prev => {
+                      if (!prev) return { content: streamedContent, isComplete: true, summary: summarizedText };
+                      return { ...prev, summary: summarizedText };
+                    });
+                    
                   // STEP 4: Play the summary audio (DISABLED)
-                  // ------------------------------
+                    // ------------------------------
                   console.log("Audio playback disabled as requested");
                   // playDescription(summarizedText); // Commented out to disable audio
-                } else {
-                  console.warn("Received empty summary, will not play audio");
+                  } else {
+                    console.warn("Received empty summary, will not play audio");
+                  }
+                } catch (summaryError) {
+                  console.error('Error generating summary:', summaryError);
+                  // Don't let summary errors block the UI update
                 }
-              } catch (summaryError) {
-                console.error('Error generating summary:', summaryError);
-                // Don't let summary errors block the UI update
+              } else {
+                console.warn("No content to summarize");
               }
-            } else {
-              console.warn("No content to summarize");
+              
+              break;
             }
             
-            break;
-          }
-          
           // Process the chunk
-          const chunk = decoder.decode(value, { stream: true });
-          streamedContent += chunk;
-          
+            const chunk = decoder.decode(value, { stream: true });
+            streamedContent += chunk;
+            
           // Update the UI with the new content
           setAiResponse(prev => {
             if (!prev) return { content: streamedContent, isComplete: false };
@@ -804,7 +804,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         });
         
         // Clear the timeout as soon as we get a response
-        clearTimeout(timeoutId);
+          clearTimeout(timeoutId);
         
         if (!response.ok) {
           throw new Error(`Summarization failed with status: ${response.status}`);
@@ -835,7 +835,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
         <div>Selected Images Count: {selectedImages.length}</div>
         <div>Selected Files Count: {selectedFiles.length}</div>
         <div>Show Upload Options: {showUploadOptions ? 'true' : 'false'}</div>
-      </div>
+        </div>
 
       {/* Hidden file inputs */}
       <input
@@ -900,7 +900,7 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
               </button>
             </div>
           )}
-        </div>
+            </div>
       ) : (
         <div className="w-full">
           {/* Show images */}
@@ -910,15 +910,15 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                 {/* Image thumbnails */}
                 {selectedImages.map((imageUrl, index) => (
                   <div key={index} className="image-container relative">
-                    <NextImage 
+                    <NextImage
                       src={imageUrl} 
-                      alt={`Selected ${index + 1}`} 
+                      alt={`Selected ${index + 1}`}
                       width={200}
                       height={120}
                       className="selected-image"
                       style={{ objectFit: 'contain', maxHeight: '120px' }}
                     />
-                    <button 
+                    <button
                       className="absolute top-1 right-1 bg-red-500 rounded-full p-1 text-white"
                       onClick={() => handleRemoveImage(index)}
                       type="button"
@@ -930,13 +930,13 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                   </div>
                 ))}
               </div>
+                    </div>
             </div>
-          </div>
-          
+
           {/* Analyze button */}
           {selectedFiles.length > 0 && !aiResponse && (
             <div className="mt-8 mb-8 flex justify-center">
-              <button
+                          <button
                 onClick={(e) => {
                   e.preventDefault();
                   processImageWithAPI(selectedFiles[0]);
@@ -947,12 +947,12 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                 <div className="flex items-center justify-center">
                   <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
+                            </svg>
                   {t('analyzeImages')}
-                </div>
-              </button>
-            </div>
-          )}
+                        </div>
+                    </button>
+                  </div>
+                )}
         </div>
       )}
 

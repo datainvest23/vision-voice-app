@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -21,12 +21,42 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
   const [error, setError] = useState('');
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   
   // Get language from context
   const { language } = useLanguage();
+  
+  // Log state changes for debugging
+  useEffect(() => {
+    console.log("Images state updated:", images.length);
+  }, [images]);
+  
+  useEffect(() => {
+    console.log("Files state updated:", files.length);
+  }, [files]);
+  
+  useEffect(() => {
+    console.log("AI Response state updated:", !!aiResponse);
+  }, [aiResponse]);
+  
+  useEffect(() => {
+    console.log("isAnalyzing state updated:", isAnalyzing);
+  }, [isAnalyzing]);
+  
+  // Cleanup function for when component unmounts
+  useEffect(() => {
+    return () => {
+      // Clean up object URLs to prevent memory leaks
+      images.forEach(url => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, [images]);
   
   const handleUploadClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -47,7 +77,78 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
     }
   };
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Image compression function
+  const compressImage = async (file: File, quality = 0.7): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = document.createElement('img');
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Resize if image is too large
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+            const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+            width = Math.floor(width * ratio);
+            height = Math.floor(height * ratio);
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+          
+          // Draw image on canvas
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert canvas to Blob with quality setting
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                reject(new Error('Failed to compress image'));
+                return;
+              }
+              
+              // Create new file from blob
+              const newFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              
+              resolve(newFile);
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = () => {
+          reject(new Error('Failed to load image'));
+        };
+      };
+      reader.onerror = () => {
+        reject(new Error('Failed to read file'));
+      };
+    });
+  };
+  
+  // Format file size for display
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    else return (bytes / 1048576).toFixed(1) + ' MB';
+  };
+  
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     
     console.log('File input changed');
@@ -60,6 +161,7 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
     
     console.log(`Selected ${selectedFiles.length} files`);
     setIsLoading(true);
+    setError('');
     
     try {
       // Create new arrays for the state update
@@ -69,11 +171,24 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
       // Process each file
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i];
+        console.log(`Processing file: ${file.name} (${formatFileSize(file.size)})`);
+        
+        // Compress image if larger than 900KB
+        let processedFile = file;
+        if (file.size > 900 * 1024) {
+          try {
+            processedFile = await compressImage(file);
+            console.log(`Compressed from ${formatFileSize(file.size)} to ${formatFileSize(processedFile.size)}`);
+          } catch (error) {
+            console.error('Compression error:', error);
+            processedFile = file; // Use original on error
+          }
+        }
         
         // Create URL for the image
-        const imageUrl = URL.createObjectURL(file);
+        const imageUrl = URL.createObjectURL(processedFile);
         newImages.push(imageUrl);
-        newFiles.push(file);
+        newFiles.push(processedFile);
         
         console.log(`Added image: ${imageUrl}`);
       }
@@ -114,7 +229,7 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
     });
   };
   
-  // This matches the original component's processImageWithAPI function
+  // Modified to better handle state during analysis
   const processImageWithAPI = async () => {
     if (files.length === 0) {
       setError('No images to process');
@@ -122,39 +237,47 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
     }
     
     try {
-      // Initialize state but don't show full loading overlay during streaming
+      console.log("📸 Starting image processing workflow");
+      // Set analyzing state to prevent UI from resetting
+      setIsAnalyzing(true);
+      
+      // Initialize response state 
       setAiResponse({ content: '', isComplete: false });
       
-      // Show loading only during initial API setup
+      // Show loading overlay
       setIsLoading(true);
       
       const formData = new FormData();
       
-      // Instead of sending a single file, send all selected files
-      files.forEach(file => {
+      // Add all selected files to the form data
+      files.forEach((file, index) => {
+        console.log(`📄 Adding file ${index + 1}/${files.length}: ${file.name} (${formatFileSize(file.size)})`);
         formData.append('files', file);
       });
       
       // Add language preference
       formData.append('language', language || 'en');
       
-      console.log(`Sending ${files.length} image(s) for analysis...`);
+      console.log(`🚀 Sending ${files.length} image(s) for analysis to upload-image API...`);
       
       // Set a timeout for the API call
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.log('API request timeout triggered');
+        console.log('⏱️ API request timeout triggered');
         controller.abort();
       }, 60000); // 60 second timeout
       
       try {
-        // STEP 1: Send image to Assistant API
+        // STEP 1: Send image to Assistant API using the working endpoint from v2.39
         // -----------------------------------
+        console.log("🔄 Fetching API at /api/upload-image...");
         const response = await fetch('/api/upload-image', {
           method: 'POST',
           body: formData,
           signal: controller.signal
         });
+        
+        console.log(`📥 API Response received: status ${response.status}`);
         
         // Remove loading overlay as we're about to stream the response
         setIsLoading(false);
@@ -162,15 +285,31 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
         clearTimeout(timeoutId);
         
         if (!response.ok) {
+          console.log(`❌ API Error: ${response.status} ${response.statusText}`);
           // Try to parse error as JSON first
           try {
             const errorData = await response.json();
+            console.log("Error data received:", errorData);
+            
+            // Handle auth errors specifically
+            if (response.status === 401 || response.status === 403) {
+              throw new Error('Authentication failed. Please sign in again.');
+            }
+            
             throw new Error(errorData.error || 'Failed to analyze image');
-          } catch {
+          } catch (parseError) {
             // If not JSON, use text or status
             const errorText = await response.text().catch(() => 'Unknown error');
+            console.log("Error text received:", errorText);
             throw new Error(errorText || `Failed with status: ${response.status}`);
           }
+        }
+        
+        console.log('Response received from API, beginning to stream...');
+        
+        // Make sure we have a readable stream
+        if (!response.body) {
+          throw new Error('No response body available');
         }
         
         // Get the thread ID from the response headers
@@ -178,11 +317,6 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
         if (responseThreadId) {
           console.log(`Thread ID received: ${responseThreadId}`);
           setThreadId(responseThreadId);
-        }
-        
-        // Make sure we have a readable stream
-        if (!response.body) {
-          throw new Error('No response body available');
         }
         
         // STEP 2: Process the streaming response from the Assistant
@@ -193,47 +327,88 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
         
         console.log('Starting to stream Assistant response...');
         
-        // Manual stream processing
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) {
-            console.log('Stream complete');
+        try {
+          // Manual stream processing for plain text (not JSON lines)
+          while (true) {
+            const { done, value } = await reader.read();
             
-            // Final update with complete flag
+            if (done) {
+              console.log('Stream complete');
+              
+              // Final update with complete flag
+              setAiResponse(prev => {
+                if (!prev) return { content: streamedContent, isComplete: true };
+                return { ...prev, content: streamedContent, isComplete: true };
+              });
+              
+              break;
+            }
+            
+            // Process the chunk as plain text
+            const chunk = decoder.decode(value, { stream: true });
+            console.log('Received text chunk:', chunk.substring(0, 50) + '...');
+            
+            // Add the text directly to the content
+            streamedContent += chunk;
+            
+            // Update the UI with the new content
             setAiResponse(prev => {
-              if (!prev) return { content: streamedContent, isComplete: true };
-              return { ...prev, content: streamedContent, isComplete: true };
+              if (!prev) return { content: streamedContent, isComplete: false };
+              return { ...prev, content: streamedContent };
             });
-            break;
           }
-          
-          // Process the chunk
-          const chunk = decoder.decode(value, { stream: true });
-          streamedContent += chunk;
-          
-          // Update the UI with the new content
-          setAiResponse(prev => {
-            if (!prev) return { content: streamedContent, isComplete: false };
-            return { ...prev, content: streamedContent };
-          });
+        } catch (streamError) {
+          console.error('Error processing stream:', streamError);
+          throw streamError;
         }
-      } catch (streamError) {
-        if (streamError instanceof Error && streamError.name === 'AbortError') {
-          console.log('Request aborted due to timeout');
-          throw new Error('Analysis timed out. Please try again with a clearer image.');
+      } catch (error) {
+        console.error('Image processing error:', error);
+        setError(error instanceof Error ? error.message : 'Failed to process image');
+        
+        // Even if there's an error, keep isAnalyzing true if we have images
+        // so the UI doesn't reset to the upload screen
+        if (files.length === 0) {
+          setIsAnalyzing(false);
         }
-        throw streamError;
       } finally {
         clearTimeout(timeoutId);
       }
     } catch (error) {
       console.error('Image processing error:', error);
       setError(error instanceof Error ? error.message : 'Failed to process image');
+      
+      // Even if there's an error, keep isAnalyzing true if we have images
+      // so the UI doesn't reset to the upload screen
+      if (files.length === 0) {
+        setIsAnalyzing(false);
+      }
     } finally {
       setIsLoading(false);
     }
   };
+  
+  // Function to reset the state
+  const handleReset = () => {
+    // Clean up object URLs
+    images.forEach(url => {
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    
+    // Reset all state
+    setImages([]);
+    setFiles([]);
+    setAiResponse(null);
+    setThreadId(null);
+    setError('');
+    setIsAnalyzing(false);
+    setShowOptions(false);
+  };
+  
+  // Determine which view to show based on the state
+  const showUploadView = images.length === 0 && !isAnalyzing;
+  const showAnalysisView = (images.length > 0 || isAnalyzing) && !showUploadView;
   
   return (
     <div className="flex flex-col items-center w-full">
@@ -244,6 +419,7 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
         <div>Show options: {showOptions ? 'true' : 'false'}</div>
         <div>Has AI response: {aiResponse ? 'true' : 'false'}</div>
         <div>Thread ID: {threadId || 'none'}</div>
+        <div>Is Analyzing: {isAnalyzing ? 'true' : 'false'}</div>
       </div>
       
       {/* Hidden file inputs */}
@@ -265,7 +441,7 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
       />
       
       {/* Main content based on state */}
-      {images.length === 0 ? (
+      {showUploadView ? (
         <div className="flex flex-col items-center justify-center w-full">
           {!showOptions ? (
             <button
@@ -331,6 +507,7 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
                       className="absolute top-1 right-1 bg-red-500 rounded-full p-1 text-white"
                       onClick={() => handleRemoveImage(index)}
                       type="button"
+                      disabled={isAnalyzing}
                     >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -371,14 +548,11 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
             </div>
           </div>
           
-          {/* Analyze button - matches the original layout */}
-          {files.length > 0 && !aiResponse && (
-            <div className="mt-8 mb-8 flex justify-center">
+          {/* Analyze button or Reset button based on analysis state */}
+          <div className="mt-8 mb-8 flex justify-center">
+            {files.length > 0 && !aiResponse && !isAnalyzing ? (
               <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  processImageWithAPI();
-                }}
+                onClick={() => processImageWithAPI()}
                 className="bg-green-600 hover:bg-green-700 text-white font-semibold py-5 px-12 rounded-lg shadow-lg text-xl transition-all duration-200 max-w-md w-full transform hover:scale-105"
                 type="button"
               >
@@ -389,8 +563,23 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
                   Analyze Images
                 </div>
               </button>
-            </div>
-          )}
+            ) : (
+              aiResponse?.isComplete && (
+                <button
+                  onClick={handleReset}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg shadow-lg text-lg transition-all duration-200 max-w-md transform hover:scale-105"
+                  type="button"
+                >
+                  <div className="flex items-center justify-center">
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    New Analysis
+                  </div>
+                </button>
+              )
+            )}
+          </div>
         </div>
       )}
       

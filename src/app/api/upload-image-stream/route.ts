@@ -5,6 +5,9 @@ import { Language } from '@/app/context/LanguageContext';
 import { checkAuth } from '@/utils/auth';
 import { MessageContentPartParam } from 'openai/resources/beta/threads/messages';
 
+// Text encoder for the stream
+const encoder = new TextEncoder();
+
 // Configure OpenAI and Cloudinary
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -105,15 +108,21 @@ Questions
 
 // This sets body parser config for Next.js 15+
 export async function POST(request: NextRequest) {
+  console.log("🔵 upload-image-stream API endpoint called");
+  
   // Check authentication first
   const authError = await checkAuth();
   if (authError) {
+    console.log("🔴 Authentication failed in upload-image-stream API");
     return authError;
   }
+  
+  console.log("✅ Authentication passed in upload-image-stream API");
 
   try {
     // Handle formData with larger sizes
     const formData = await request.formData();
+    console.log("📦 FormData received, processing files...");
     
     // Get all files with the 'files' key (for multiple files)
     const files = formData.getAll('files') as File[];
@@ -340,7 +349,4 @@ export async function POST(request: NextRequest) {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
-}
-
-// Text encoder for the stream
-const encoder = new TextEncoder(); 
+} 
