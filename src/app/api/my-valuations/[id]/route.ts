@@ -1,10 +1,11 @@
+// Next.js App Router API Route with Dynamic Route Segment
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { checkAuth } from '@/utils/auth';
 
 export const dynamic = 'force-dynamic';
 
-// Use the exact pattern Next.js 15 expects for dynamic routes
+// Make the handler async since we need to await checkAuth
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -15,6 +16,11 @@ export async function GET(
     return authError;
   }
 
+  return fetchValuation(params.id);
+}
+
+// Separate the implementation to avoid type issues
+async function fetchValuation(valuationId: string) {
   try {
     // Get authenticated user
     const supabase = await createClient();
@@ -28,7 +34,6 @@ export async function GET(
     }
     
     const userId = user.id;
-    const valuationId = params.id;
     
     if (!valuationId) {
       return NextResponse.json(
