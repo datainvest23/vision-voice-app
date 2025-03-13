@@ -1,5 +1,9 @@
 'use client';
 
+// DEPRECATED: This component is no longer needed as its functionality has been consolidated 
+// into the main ImageUpload.tsx component. This file can be safely deleted.
+// See ImageUpload.tsx for the current implementation with image compression.
+
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useLanguage } from '../context/LanguageContext';
@@ -22,6 +26,7 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showUploadView, setShowUploadView] = useState(true);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +50,14 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
   useEffect(() => {
     console.log("isAnalyzing state updated:", isAnalyzing);
   }, [isAnalyzing]);
+  
+  useEffect(() => {
+    // Update the showUploadView based on images and analyzing state
+    // If we have an AI response, we should always show the analysis view
+    const shouldShowUploadView = images.length === 0 && !isAnalyzing && !aiResponse;
+    console.log(`Setting showUploadView to ${shouldShowUploadView}`);
+    setShowUploadView(shouldShowUploadView);
+  }, [images.length, isAnalyzing, aiResponse]);
   
   // Cleanup function for when component unmounts
   useEffect(() => {
@@ -258,26 +271,24 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
       // Add language preference
       formData.append('language', language || 'en');
       
-      console.log(`🚀 Sending ${files.length} image(s) for analysis to upload-image API...`);
+      console.log(`Sending ${files.length} image(s) for analysis...`);
       
       // Set a timeout for the API call
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.log('⏱️ API request timeout triggered');
+        console.log('API request timeout triggered');
         controller.abort();
       }, 60000); // 60 second timeout
       
       try {
-        // STEP 1: Send image to Assistant API using the working endpoint from v2.39
-        // -----------------------------------
-        console.log("🔄 Fetching API at /api/upload-image...");
+        // Send image to Assistant API using the upload-image endpoint
         const response = await fetch('/api/upload-image', {
           method: 'POST',
           body: formData,
           signal: controller.signal
         });
         
-        console.log(`📥 API Response received: status ${response.status}`);
+        console.log(`API Response received: status ${response.status}`);
         
         // Remove loading overlay as we're about to stream the response
         setIsLoading(false);
@@ -285,7 +296,7 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
         clearTimeout(timeoutId);
         
         if (!response.ok) {
-          console.log(`❌ API Error: ${response.status} ${response.statusText}`);
+          console.log(`API Error: ${response.status} ${response.statusText}`);
           // Try to parse error as JSON first
           try {
             const errorData = await response.json();
@@ -297,15 +308,13 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
             }
             
             throw new Error(errorData.error || 'Failed to analyze image');
-          } catch (parseError) {
+          } catch {
             // If not JSON, use text or status
             const errorText = await response.text().catch(() => 'Unknown error');
             console.log("Error text received:", errorText);
             throw new Error(errorText || `Failed with status: ${response.status}`);
           }
         }
-        
-        console.log('Response received from API, beginning to stream...');
         
         // Make sure we have a readable stream
         if (!response.body) {
@@ -317,10 +326,11 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
         if (responseThreadId) {
           console.log(`Thread ID received: ${responseThreadId}`);
           setThreadId(responseThreadId);
+        } else {
+          console.warn('No thread ID found in response headers');
         }
         
-        // STEP 2: Process the streaming response from the Assistant
-        // --------------------------------------------------------
+        // Process the streaming response from the Assistant
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let streamedContent = '';
@@ -328,7 +338,7 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
         console.log('Starting to stream Assistant response...');
         
         try {
-          // Manual stream processing for plain text (not JSON lines)
+          // Manual stream processing for plain text
           while (true) {
             const { done, value } = await reader.read();
             
@@ -340,13 +350,15 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
                 if (!prev) return { content: streamedContent, isComplete: true };
                 return { ...prev, content: streamedContent, isComplete: true };
               });
+
+              // Do NOT set isAnalyzing to false here - we want to keep showing the analysis view
+              console.log('Stream complete, keeping analysis view visible');
               
               break;
             }
             
             // Process the chunk as plain text
             const chunk = decoder.decode(value, { stream: true });
-            console.log('Received text chunk:', chunk.substring(0, 50) + '...');
             
             // Add the text directly to the content
             streamedContent += chunk;
@@ -364,10 +376,10 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
       } catch (error) {
         console.error('Image processing error:', error);
         setError(error instanceof Error ? error.message : 'Failed to process image');
-        
-        // Even if there's an error, keep isAnalyzing true if we have images
-        // so the UI doesn't reset to the upload screen
-        if (files.length === 0) {
+
+        // Reset isAnalyzing ONLY if we don't have a valid AI response
+        if (!aiResponse?.content) {
+          console.log('Setting isAnalyzing to false due to error without content');
           setIsAnalyzing(false);
         }
       } finally {
@@ -376,10 +388,10 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
     } catch (error) {
       console.error('Image processing error:', error);
       setError(error instanceof Error ? error.message : 'Failed to process image');
-      
-      // Even if there's an error, keep isAnalyzing true if we have images
-      // so the UI doesn't reset to the upload screen
-      if (files.length === 0) {
+
+      // Reset isAnalyzing ONLY if we don't have a valid AI response
+      if (!aiResponse?.content) {
+        console.log('Setting isAnalyzing to false due to outer error without content');
         setIsAnalyzing(false);
       }
     } finally {
@@ -389,13 +401,15 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
   
   // Function to reset the state
   const handleReset = () => {
+    console.log("Resetting all state...");
+    
     // Clean up object URLs
     images.forEach(url => {
       if (url.startsWith('blob:')) {
         URL.revokeObjectURL(url);
       }
     });
-    
+
     // Reset all state
     setImages([]);
     setFiles([]);
@@ -404,11 +418,10 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
     setError('');
     setIsAnalyzing(false);
     setShowOptions(false);
+    
+    // This should trigger the useEffect to show the upload view again
+    console.log("Reset complete, upload view should now be visible");
   };
-  
-  // Determine which view to show based on the state
-  const showUploadView = images.length === 0 && !isAnalyzing;
-  const showAnalysisView = (images.length > 0 || isAnalyzing) && !showUploadView;
   
   return (
     <div className="flex flex-col items-center w-full">
@@ -420,6 +433,7 @@ export default function SimpleImageUpload({ setIsLoading }: SimpleImageUploadPro
         <div>Has AI response: {aiResponse ? 'true' : 'false'}</div>
         <div>Thread ID: {threadId || 'none'}</div>
         <div>Is Analyzing: {isAnalyzing ? 'true' : 'false'}</div>
+        <div>Show Upload View: {showUploadView ? 'true' : 'false'}</div>
       </div>
       
       {/* Hidden file inputs */}

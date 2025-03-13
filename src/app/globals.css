@@ -124,12 +124,20 @@ body {
   @apply w-full max-w-[2000px] mx-auto;
 }
 
+/* Improved Grid Layout to utilize more screen space */
 .grid-layout {
-  @apply grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-6 p-8;
+  @apply grid gap-6 p-4 sm:p-6 lg:p-8;
+  grid-template-columns: minmax(200px, 1fr) minmax(300px, 3fr);
+  width: 100%;
+  max-width: 1800px;
+  margin: 0 auto;
 }
 
+/* Enhanced card styling for better content display */
 .card {
-  @apply p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md mb-6;
+  @apply bg-white dark:bg-gray-800 rounded-xl shadow-md mb-6;
+  padding: 1.5rem;
+  width: 100%;
 }
 
 .image-container {
@@ -142,34 +150,41 @@ body {
   @apply w-full h-auto max-h-[250px] object-contain rounded-lg;
 }
 
+/* Improved content container to reduce scrolling */
 .content-container {
-  @apply flex flex-col space-y-6 w-full;
-  max-height: 90vh;
+  @apply flex flex-col w-full;
+  max-height: 100vh;
   overflow-y: auto;
 }
 
+/* Text container modifications for better readability */
 .text-container {
-  @apply space-y-10;
+  @apply space-y-6;
+  width: 100%;
 }
 
 .description-text {
-  @apply text-lg leading-relaxed whitespace-pre-wrap;
+  @apply text-base leading-relaxed whitespace-pre-wrap;
 }
 
 .button-container {
   @apply mt-6 pt-4 border-t border-gray-100 dark:border-gray-700;
 }
 
+/* Responsive typography */
 @screen lg {
   .description-text {
-    font-size: clamp(1rem, 1.2vw, 1.25rem);
+    font-size: 1.05rem;
     line-height: 1.75;
   }
 }
 
+/* Improved responsive design */
 @media (max-width: 1024px) {
   .grid-layout {
     @apply grid-cols-1 gap-6;
+    max-width: 100%;
+    padding: 1rem;
   }
   
   .image-container {
@@ -182,16 +197,36 @@ body {
     max-height: 180px;
   }
 
-  .images-container img {
-    max-height: 150px;
+  .images-container {
+    @apply flex flex-row flex-wrap justify-center gap-2;
+    max-height: unset;
+  }
+
+  .images-container > div {
+    max-width: 45%;
   }
 
   .content-container {
-    @apply mt-6;
+    @apply mt-4;
   }
 
   .card {
-    @apply p-6;
+    @apply p-4;
+  }
+}
+
+/* Mobile optimization */
+@media (max-width: 640px) {
+  .grid-layout {
+    padding: 0.5rem;
+  }
+  
+  .images-container > div {
+    max-width: 100%;
+  }
+  
+  .card {
+    @apply p-3;
   }
 }
 
@@ -206,8 +241,9 @@ body {
     transform hover:scale-105 transition-all duration-300 w-full;
 }
 
+/* Improved image container layout */
 .images-container {
-  @apply flex flex-col;
+  @apply flex flex-col gap-3;
   max-height: 80vh;
   overflow-y: auto;
 }
@@ -219,7 +255,73 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Markdown styling */
+/* Enhanced prose container for markdown content */
+.prose-container {
+  @apply max-w-none border border-gray-100 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800/50;
+  width: 100%;
+  overflow-wrap: break-word;
+}
+
+/* Add basic typography styles to replace prose classes */
+.prose-container h1,
+.prose-container h2,
+.prose-container h3,
+.prose-container h4,
+.prose-container h5,
+.prose-container h6 {
+  @apply font-semibold my-4;
+}
+
+.prose-container h1 {
+  @apply text-2xl;
+}
+
+.prose-container h2 {
+  @apply text-xl;
+}
+
+.prose-container h3 {
+  @apply text-lg;
+}
+
+.prose-container p {
+  @apply my-3;
+}
+
+.prose-container ul,
+.prose-container ol {
+  @apply my-3 pl-6;
+}
+
+.prose-container ul {
+  @apply list-disc;
+}
+
+.prose-container ol {
+  @apply list-decimal;
+}
+
+.prose-container li {
+  @apply mb-1;
+}
+
+.prose-container blockquote {
+  @apply border-l-4 border-gray-200 dark:border-gray-700 pl-4 italic my-4;
+}
+
+.prose-container code {
+  @apply bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm;
+}
+
+.prose-container pre {
+  @apply bg-gray-100 dark:bg-gray-800 p-3 rounded my-4 overflow-x-auto;
+}
+
+.prose-container img {
+  @apply my-4 rounded;
+}
+
+/* Markdown styling enhancements */
 .description-text h1, 
 .description-text h2, 
 .description-text h3, 
@@ -240,13 +342,13 @@ body {
 .description-text h6 { font-size: 1rem; }
 
 .description-text p {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .description-text ul, 
 .description-text ol {
   margin-top: 0.25rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
   padding-left: 1.5rem;
 }
 

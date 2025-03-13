@@ -10,8 +10,9 @@ export function AuthSetup() {
     // Listen for authentication state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user?.id) {
-        // New sign-in detected, grant initial tokens
-        await grantInitialTokens(session.user.id);
+        // NOTE: Initial token granting on signup has been disabled
+        console.log('User signed in:', session.user.id);
+        // await grantInitialTokens(session.user.id);
       }
     });
     
@@ -25,6 +26,7 @@ export function AuthSetup() {
   return null;
 }
 
+/* DISABLED: This feature has been temporarily removed
 // Function to grant initial tokens to new users
 async function grantInitialTokens(userId: string) {
   try {
@@ -54,4 +56,5 @@ async function grantInitialTokens(userId: string) {
   } catch (error) {
     console.error('Error in token grant process:', error);
   }
-} 
+}
+*/ 

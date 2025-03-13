@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import LanguageSelector from './components/LanguageSelector';
 import NavBar from './components/NavBar';
-import { useLanguage } from './context/LanguageContext';
 import { useAuth } from './context/AuthContext';
-import SimpleImageUpload from './components/SimpleImageUpload';
+import ImageUpload from './components/ImageUpload';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
-  const { t } = useLanguage();
+  // const { t } = useLanguage();
   const { isLoading: authLoading } = useAuth();
   
   // Define a test mode flag
@@ -43,16 +42,16 @@ export default function Home() {
       <NavBar />
       
       {/* Added top padding for fixed navbar */}
-      <div className="w-full p-6 pt-20 flex flex-col items-center">
+      <div className="w-full p-4 sm:p-6 pt-20 flex flex-col items-center">
         {/* Language Selector in top-right corner */}
         <div className="w-full max-w-[2000px] flex justify-end mb-2">
           <LanguageSelector />
         </div>
         
-        <div className="w-full max-w-[2000px] flex flex-col items-center space-y-10">
+        <div className="w-full flex flex-col items-center">
           {/* Logo Section - Made Bigger */}
-          <div className="flex flex-col items-center">
-            <div className="w-56 h-56 relative">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-40 h-40 sm:w-56 sm:h-56 relative">
               <Image 
                 src="/aa_logo.png" 
                 alt="Antiques Appraisal Logo" 
@@ -63,21 +62,14 @@ export default function Home() {
             </div>
           </div>
           
-          {/* Upload Section - Removed frame/border and simplified to just the component */}
-          <div className="w-full max-w-lg">
-            {isLoading ? (
-              <div className="loading-container">
-                <div className="loading-spinner"></div>
-                <div className="loading-text">Analyzing your antique...</div>
-              </div>
-            ) : (
-              <SimpleImageUpload setIsLoading={setIsLoading} />
-            )}
+          {/* Upload Section - Allow more width for better content display */}
+          <div className="w-full max-w-[1800px]">
+            <ImageUpload setIsLoading={setIsLoading} externalLoading={isLoading} />
           </div>
         </div>
         
         {/* Footer */}
-        <footer className="w-full max-w-[2000px] mt-auto pt-8 text-center text-sm text-gray-500 dark:text-gray-400">
+        <footer className="w-full max-w-[2000px] mt-8 pt-8 text-center text-sm text-gray-500 dark:text-gray-400">
           <p>© {new Date().getFullYear()} Antiques Appraisal</p>
         </footer>
       </div>

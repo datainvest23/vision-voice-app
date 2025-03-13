@@ -148,7 +148,79 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      // Create a ReadableStream for the response
+      // Upload all images to Cloudinary FIRST and get their URLs
+      const imageUrls: string[] = [];
+      
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const file = filesToProcess[i];
+        console.log(`Processing file ${i+1}/${filesToProcess.length}: ${file.name}`);
+        
+        // Convert file to buffer for Cloudinary
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        // Upload to Cloudinary
+        try {
+          console.log(`Uploading to Cloudinary: ${file.name}`);
+          const cloudinaryResult = await new Promise<CloudinaryUploadResult>((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
+              {
+                resource_type: 'auto',
+                timeout: 60000 // 60 second timeout for Cloudinary
+              },
+              (error, result) => {
+                if (error) {
+                  console.error("Cloudinary upload error:", error);
+                  reject(error);
+                } else if (!result) {
+                  reject(new Error("No result from Cloudinary upload"));
+                } else {
+                  console.log(`Image ${i+1} uploaded successfully to Cloudinary`);
+                  resolve(result as CloudinaryUploadResult);
+                }
+              }
+            ).end(buffer);
+          });
+
+          imageUrls.push(cloudinaryResult.secure_url);
+          console.log(`Added image ${i+1} URL: ${cloudinaryResult.secure_url.substring(0, 50)}...`);
+        } catch (cloudinaryError) {
+          console.error(`Cloudinary upload failed for file ${i+1}:`, cloudinaryError);
+          throw new Error(`Failed to upload image ${i+1}: ${cloudinaryError instanceof Error ? cloudinaryError.message : 'Unknown error'}`);
+        }
+      }
+      
+      // Step 1: Create a Thread BEFORE creating the stream
+      console.log("Creating thread for assistant...");
+      const thread = await openai.beta.threads.create();
+      const threadId = thread.id; // Store the thread ID for header
+      console.log(`Thread created with ID: ${threadId}`);
+      
+      // Step 2: Prepare message with instructions and images
+      const messageText = `${promptTemplates[language]} Please respond in ${language}. ${
+        imageUrls.length > 1 ? `I'm providing ${imageUrls.length} images of the same item from different angles.` : ''
+      }`;
+      
+      // Create message content array with text and images
+      const messageContent: MessageContentParam[] = [];
+      messageContent.push({ type: "text", text: messageText });
+      
+      // Add image URLs to the message content
+      for (const url of imageUrls) {
+        messageContent.push({
+          type: "image_url",
+          image_url: { url }
+        });
+      }
+      
+      // Add message to thread
+      await openai.beta.threads.messages.create(thread.id, {
+        role: "user",
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+        content: messageContent as unknown as any
+      });
+      
+      // NOW create the stream with the threadId captured in closure
       const stream = new ReadableStream({
         async start(controller) {
           try {
@@ -158,83 +230,24 @@ export async function POST(request: NextRequest) {
               content: 'Starting image processing...' 
             }) + '\n'));
             
-            // Upload all images to Cloudinary and get their URLs
-            const imageUrls: string[] = [];
-            
-            for (let i = 0; i < filesToProcess.length; i++) {
-              const file = filesToProcess[i];
-              // Convert file to buffer for Cloudinary
-              const bytes = await file.arrayBuffer();
-              const buffer = Buffer.from(bytes);
-              
-              // Send status update
-              controller.enqueue(encoder.encode(JSON.stringify({ 
-                type: 'status', 
-                content: `Uploading image ${i + 1} of ${filesToProcess.length}...` 
-              }) + '\n'));
-
-              // Upload to Cloudinary
-              const cloudinaryResult = await new Promise<CloudinaryUploadResult>((resolve, reject) => {
-                cloudinary.uploader.upload_stream(
-                  {
-                    resource_type: 'auto',
-                    timeout: 60000 // 60 second timeout for Cloudinary
-                  },
-                  (error, result) => {
-                    if (error) reject(error);
-                    else resolve(result as CloudinaryUploadResult);
-                  }
-                ).end(buffer);
-              });
-
-              imageUrls.push(cloudinaryResult.secure_url);
-            }
-            
-            // Send status update
+            // Send status updates for the steps we've already completed
             controller.enqueue(encoder.encode(JSON.stringify({ 
               type: 'status', 
               content: 'Images uploaded. Creating assistant thread...' 
             }) + '\n'));
             
-            // Step 1: Create a Thread
-            const thread = await openai.beta.threads.create();
-            
-            // Step 2: Prepare message with instructions and images
-            const messageText = `${promptTemplates[language]} Please respond in ${language}. ${
-              imageUrls.length > 1 ? `I'm providing ${imageUrls.length} images of the same item from different angles.` : ''
-            }`;
-            
-            // Create message content array with text and images
-            const messageContent: MessageContentParam[] = [];
-            messageContent.push({ type: "text", text: messageText });
-            
-            // Add image URLs to the message content
-            for (const url of imageUrls) {
-              messageContent.push({
-                type: "image_url",
-                image_url: { url }
-              });
-            }
-            
-            // Send status update
             controller.enqueue(encoder.encode(JSON.stringify({ 
               type: 'status', 
               content: 'Processing images with AI...' 
             }) + '\n'));
             
-            // Add message to thread
-            await openai.beta.threads.messages.create(thread.id, {
-              role: "user",
-              /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-              content: messageContent as unknown as any
-            });
-            
             // Step 3: Run the Assistant on the Thread with streaming
+            console.log(`Running assistant ${process.env.OPENAI_ASSISTANT_ID} on thread ${thread.id} with streaming...`);
             const runStream = await openai.beta.threads.runs.createAndStream(
               thread.id,
               {
                 assistant_id: process.env.OPENAI_ASSISTANT_ID!,
-                model: "gpt-4o", // Explicitly use gpt-4o-mini as requested? CHANGED TO 
+                model: "gpt-4o", // Explicitly use gpt-4o
               }
             );
             
@@ -318,13 +331,14 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // Create and return a streaming response
+      // Create and return a streaming response with thread ID header
       return new Response(stream, {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
-        },
+          'x-thread-id': threadId  // Use the stored variable
+        }
       });
       
     } catch (assistantError: unknown) {
