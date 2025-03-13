@@ -4,9 +4,10 @@ import { checkAuth } from '@/utils/auth';
 
 export const dynamic = 'force-dynamic';
 
+// Use the exact pattern Next.js 15 expects for dynamic routes
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   // Check if user is authenticated
   const authError = await checkAuth();
@@ -27,7 +28,7 @@ export async function GET(
     }
     
     const userId = user.id;
-    const valuationId = context.params.id;
+    const valuationId = params.id;
     
     if (!valuationId) {
       return NextResponse.json(
