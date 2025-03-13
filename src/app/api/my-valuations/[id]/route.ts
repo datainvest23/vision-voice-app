@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   // Check if user is authenticated
   const authError = await checkAuth();
@@ -27,7 +27,7 @@ export async function GET(
     }
     
     const userId = user.id;
-    const valuationId = params.id;
+    const valuationId = context.params.id;
     
     if (!valuationId) {
       return NextResponse.json(
