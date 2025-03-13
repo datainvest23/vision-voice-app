@@ -1,21 +1,21 @@
 // Next.js App Router API Route with Dynamic Route Segment
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { checkAuth } from '@/utils/auth';
 
 export const dynamic = 'force-dynamic';
 
-// Use NextApiRequest and NextApiResponse types
+// Use NextRequest and NextResponse types
 export async function GET(
-  req: NextApiRequest,
-  res: NextApiResponse
+  request: NextRequest,
+  context: { params: { id: string } }
 ) {
-  const { id } = req.query;
+  const { id } = context.params;
 
   // Check if user is authenticated
   const authError = await checkAuth();
   if (authError) {
-    return res.status(401).json(authError);
+    return NextResponse.json(authError, { status: 401 });
   }
 
   try {
@@ -24,13 +24,13 @@ export async function GET(
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError || !user) {
-      return res.status(401).json({ error: 'Authentication failed' });
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
     }
     
     const userId = user.id;
     
     if (!id) {
-      return res.status(400).json({ error: 'Valuation ID is required' });
+      return NextResponse.json({ error: 'Valuation ID is required' }, { status: 400 });
     }
     
     // Get the specific valuation
@@ -44,32 +44,32 @@ export async function GET(
     if (error) {
       if (error.code === 'PGRST116') {
         // Not found or not authorized
-        return res.status(404).json({ error: 'Valuation not found or you do not have permission to view it' });
+        return NextResponse.json({ error: 'Valuation not found or you do not have permission to view it' }, { status: 404 });
       }
       
       console.error('Error fetching valuation:', error);
-      return res.status(500).json({ error: 'Failed to fetch valuation' });
+      return NextResponse.json({ error: 'Failed to fetch valuation' }, { status: 500 });
     }
     
-    return res.json(valuation);
+    return NextResponse.json(valuation);
     
   } catch (error) {
     console.error('Valuation fetch error:', error);
-    return res.status(500).json({ error: 'Failed to fetch valuation' });
+    return NextResponse.json({ error: 'Failed to fetch valuation' }, { status: 500 });
   }
 }
 
 // DELETE handler using the same pattern
 export async function DELETE(
-  req: NextApiRequest,
-  res: NextApiResponse
+  request: NextRequest,
+  context: { params: { id: string } }
 ) {
-  const { id } = req.query;
+  const { id } = context.params;
 
   // Check if user is authenticated
   const authError = await checkAuth();
   if (authError) {
-    return authError;
+    return NextResponse.json(authError, { status: 401 });
   }
 
   try {
@@ -78,13 +78,13 @@ export async function DELETE(
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError || !user) {
-      return res.status(401).json({ error: 'Authentication failed' });
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
     }
     
     const userId = user.id;
     
     if (!id) {
-      return res.status(400).json({ error: 'Valuation ID is required' });
+      return NextResponse.json({ error: 'Valuation ID is required' }, { status: 400 });
     }
     
     // First check if the valuation exists and belongs to the user
@@ -97,11 +97,11 @@ export async function DELETE(
       
     if (fetchError) {
       if (fetchError.code === 'PGRST116') {
-        return res.status(404).json({ error: 'Valuation not found or you do not have permission to delete it' });
+        return NextResponse.json({ error: 'Valuation not found or you do not have permission to delete it' }, { status: 404 });
       }
       
       console.error('Error checking valuation:', fetchError);
-      return res.status(500).json({ error: 'Failed to verify valuation ownership' });
+      return NextResponse.json({ error: 'Failed to verify valuation ownership' }, { status: 500 });
     }
     
     // Delete the valuation
@@ -113,12 +113,12 @@ export async function DELETE(
       
     if (deleteError) {
       console.error('Error deleting valuation:', deleteError);
-      return res.status(500).json({ error: 'Failed to delete valuation' });
+      return NextResponse.json({ error: 'Failed to delete valuation' }, { status: 500 });
     }
     
-    return res.json({ message: 'Valuation deleted successfully' });
+    return NextResponse.json({ message: 'Valuation deleted successfully' });
   } catch (error) {
     console.error('Valuation deletion error:', error);
-    return res.status(500).json({ error: 'Failed to delete valuation' });
+    return NextResponse.json({ error: 'Failed to delete valuation' }, { status: 500 });
   }
 } 
