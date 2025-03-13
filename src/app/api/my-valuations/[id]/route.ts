@@ -117,7 +117,7 @@ export async function DELETE(
     }
     
     // First check if the valuation exists and belongs to the user
-    const { data: existing, error: fetchError } = await supabase
+    const { error: fetchError } = await supabase
       .from('valuations')
       .select('id')
       .eq('id', id)
