@@ -64,7 +64,7 @@ export default function Home() {
           
           {/* Upload Section - Allow more width for better content display */}
           <div className="w-full max-w-[1800px]">
-            <ImageUpload setIsLoading={setIsLoading} externalLoading={isLoading} />
+            <ImageUpload setIsLoading={setIsLoading} />
           </div>
         </div>
         

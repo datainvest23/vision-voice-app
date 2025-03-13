@@ -13,13 +13,11 @@ interface AIResponse {
   isComplete: boolean;
 }
 
-// Added externalLoading prop
 interface ImageUploadProps {
     setIsLoading: (loading: boolean) => void;
-    externalLoading?: boolean;
 }
 
-export default function ImageUpload({ setIsLoading, externalLoading = false }: ImageUploadProps) {
+export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
   const [images, setImages] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [showOptions, setShowOptions] = useState(false);
@@ -29,8 +27,9 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
   const [isAnalyzing, setIsAnalyzing] = useState(false);  // Tracks overall analysis process
   // _transcription isn't directly used in the component, but we need to keep the state
   // as it's updated by handleTranscriptionComplete and may be needed for future features
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_transcription, setTranscription] = useState(''); // Store the transcribed text
+  const [hasRecordedComment, setHasRecordedComment] = useState(false); // Track if user has recorded a comment
+  const [isSaving, setIsSaving] = useState(false); // Track save operation state
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -46,20 +45,20 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
       aiResponse: aiResponse ? `Content length: ${aiResponse.content.length}, isComplete: ${aiResponse.isComplete}` : 'null',
       threadId,
       isAnalyzing,
-      externalLoading
+      hasRecordedComment
     });
-  }, [images.length, files.length, aiResponse, threadId, isAnalyzing, externalLoading]);
+  }, [images.length, files.length, aiResponse, threadId, isAnalyzing, hasRecordedComment]);
 
-  // Cleanup URLs on unmount or when images change
-  useEffect(() => {
-    return () => {
-      images.forEach(url => {
-        if (url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-      });
-    };
-  }, [images]);
+    // Cleanup URLs on unmount or when images change
+    useEffect(() => {
+        return () => {
+          images.forEach(url => {
+            if (url.startsWith('blob:')) {
+              URL.revokeObjectURL(url);
+            }
+          });
+        };
+    }, [images]);
 
   const handleUploadClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -151,37 +150,37 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
     else return (bytes / 1048576).toFixed(1) + ' MB';
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      e.preventDefault();
-      const selectedFiles = e.target.files;
-      if (!selectedFiles || selectedFiles.length === 0) {
-          return;
-      }
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        const selectedFiles = e.target.files;
+        if (!selectedFiles || selectedFiles.length === 0) {
+            return;
+        }
       console.log("🔄 handleFileChange: Beginning to process selected files");
-      // Reset error and previous analysis
-      setError('');
-      setAiResponse(null);
+        // Reset error and previous analysis
+        setError('');
+        setAiResponse(null);
       setIsAnalyzing(true); // Set Loading
       setIsLoading(true); // Update parent loading state
 
-      const newImages: string[] = [];
-      const newFiles: File[] = [];
-      let totalFiles = files.length; // Keep track of existing + new files
+        const newImages: string[] = [];
+        const newFiles: File[] = [];
+        let totalFiles = files.length; // Keep track of existing + new files
 
-      try {
-          for (let i = 0; i < selectedFiles.length; i++) {
-              if (totalFiles >= 3) { // Limit to 3 images total
-                  setError(t('remaining'));
-                  break; // Stop processing if limit is reached
-              }
-              const file = selectedFiles[i];
+        try {
+            for (let i = 0; i < selectedFiles.length; i++) {
+                if (totalFiles >= 3) { // Limit to 3 images total
+                    setError(t('remaining'));
+                    break; // Stop processing if limit is reached
+                }
+                const file = selectedFiles[i];
               console.log(`🖼️ Processing file ${i+1}: ${file.name} (${formatFileSize(file.size)})`);
 
               // Basic validation: Check if the file is an image.
-              if (!file.type.startsWith('image/')) {
-                  setError('Only image files are allowed.');
-                  return; // Stop if a non-image file is encountered
-              }
+                if (!file.type.startsWith('image/')) {
+                    setError('Only image files are allowed.');
+                    return; // Stop if a non-image file is encountered
+                }
 
               // Compress image if larger than 900KB
               let processedFile = file;
@@ -197,24 +196,24 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
               }
 
               const imageUrl = URL.createObjectURL(processedFile);
-              newImages.push(imageUrl);
+                newImages.push(imageUrl);
               newFiles.push(processedFile);
-              totalFiles++; // Increment count for each valid file
-          }
+                totalFiles++; // Increment count for each valid file
+            }
           console.log(`📊 Total files ready for upload: ${newFiles.length}`);
-      } catch (err) {
+        } catch (err) {
           console.error("❌ Error processing files on the client:", err);
-          setError("Error processing files.");
+            setError("Error processing files.");
 
-      } finally {
+        } finally {
           // Update state with new images and files
-          setImages(prevImages => [...prevImages, ...newImages]);
-          setFiles(prevFiles => [...prevFiles, ...newFiles]);
-          setShowOptions(false); // Hide options after handling files
-          if (e.target) {
-              e.target.value = '';  //Clear file input
-          }
-          setIsAnalyzing(false);
+            setImages(prevImages => [...prevImages, ...newImages]);
+            setFiles(prevFiles => [...prevFiles, ...newFiles]);
+            setShowOptions(false); // Hide options after handling files
+            if (e.target) {
+                e.target.value = '';  //Clear file input
+            }
+            setIsAnalyzing(false);
           setIsLoading(false);
           console.log("🔄 handleFileChange: Files prepared and ready for analysis");
           
@@ -229,8 +228,8 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
                   processImagesWithAPI(allFiles);
               }, 100);
           }
-      }
-  };
+        }
+    };
 
   const handleRemoveImage = (index: number) => {
     setImages(prevImages => {
@@ -285,7 +284,7 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
     setThreadId(null); // Clear previous thread ID
     //Added set isLoading
     setIsLoading(true);
-    console.log("⏳ Loading states set: isAnalyzing=true, externalLoading=true");
+    console.log("⏳ Loading states set: isAnalyzing=true");
 
     const formData = new FormData();
     processFiles.forEach((file, index) => {
@@ -303,9 +302,9 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
         try {
           // Using the streaming endpoint
           response = await fetch('/api/upload-image-stream', {
-            method: 'POST',
-            body: formData,
-          });
+          method: 'POST',
+          body: formData,
+        });
           console.log("📥 Received response with status:", response.status, response.statusText);
           
           // Log headers
@@ -327,7 +326,7 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
         if (!response.ok) {
           console.error(`❌ API error: ${response.status} ${response.statusText}`);
           try {
-            const errorData = await response.json();
+          const errorData = await response.json();
             console.error("❌ Error details:", errorData);
             throw new Error(errorData.error || `Server error: ${response.status}`);
           } catch (parseError) {
@@ -358,7 +357,7 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
         if (!response.body) {
             console.error("❌ Response has no body");
             throw new Error('No response body available');
-        }
+          }
 
         console.log("📥 Starting to read response stream...");
         const reader = response.body.getReader();
@@ -367,9 +366,9 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
 
         // Process the stream
         try {
-          while (true) {
-              const { done, value } = await reader.read();
-              if (done) {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
                   console.log("📥 Stream complete");
                   // Make sure we mark the response as complete
                   setAiResponse(prev => {
@@ -383,11 +382,11 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
                       });
                       return newState;
                   });
-                  break;
-              }
+                break;
+            }
 
               // Decode the chunk
-              const chunk = decoder.decode(value, { stream: true });
+             const chunk = decoder.decode(value, { stream: true });
               console.log(`📥 Received chunk of ${chunk.length} bytes`);
               
               // Handle each line separately (chunks might contain multiple lines)
@@ -496,7 +495,7 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
         
         // Alert the console for easier debugging
         console.warn('❌ Image upload failed:', errorMessage);
-        console.log('⏹️ Reset loading states: isAnalyzing=false, externalLoading=false');
+        console.log('⏹️ Reset loading states: isAnalyzing=false');
         
         // Return to prevent further execution
         return;
@@ -504,7 +503,7 @@ export default function ImageUpload({ setIsLoading, externalLoading = false }: I
         console.log('⏹️ Finally block: Resetting loading states');
         setIsAnalyzing(false);
         setIsLoading(false); //Added set isLoading
-        console.log("🔄 processImagesWithAPI complete: isAnalyzing=false, externalLoading=false");
+        console.log("🔄 processImagesWithAPI complete: isAnalyzing=false");
     }
 };
 
@@ -557,6 +556,8 @@ const handleTranscriptionComplete = async (transcribedText: string) => {
                 setAiResponse(() => ({ content: streamedContent, isComplete: false }));
             }
 
+            // Mark that a comment has been recorded and processed
+            setHasRecordedComment(true);
 
         } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to send comment';
@@ -569,224 +570,297 @@ const handleTranscriptionComplete = async (transcribedText: string) => {
         }
       };
 
+  // New function to handle saving the appraisal
+  const handleSaveAppraisal = async () => {
+    if (!aiResponse || !aiResponse.isComplete || !hasRecordedComment) {
+      return; // Don't proceed if conditions aren't met
+    }
+
+    setIsSaving(true);
+    setError('');
+
+    try {
+      // Prepare the data for saving
+      const appraisalData = {
+        title: `Antique Appraisal - ${new Date().toLocaleDateString()}`,
+        fullDescription: aiResponse.content,
+        summary: aiResponse.content.split('\n\n')[0] || 'Appraisal Summary',
+        userComment: _transcription,
+        images: images,
+        assistantResponse: aiResponse.content,
+        assistantFollowUp: '', // This would be the follow-up response if any
+        isDetailed: true
+      };
+
+      // Call the save-to-supabase API
+      const response = await fetch('/api/save-to-supabase', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(appraisalData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save appraisal');
+      }
+
+      // Handle successful save
+      console.log('Appraisal saved successfully!');
+      
+      // Maybe show some success message to the user
+      alert('Your appraisal has been saved successfully!');
+      
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save appraisal';
+      setError(errorMessage);
+      console.error('Error saving appraisal:', error);
+    } finally {
+      setIsSaving(false);
+        }
+      };
+
   return (
     <div className="w-full">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleFileChange}
+        className="hidden"
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileChange}
+        className="hidden"
+      />
 
-      {/* Display loading UI if externally set */}
-      {externalLoading && (
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <div className="loading-text">Analyzing your antique...</div>
-        </div>
-      )}
-
-      {/* Main content - only show when not externally loading */}
-      {!externalLoading && (
-        <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-
-          {/* Main content */}
-          {images.length === 0 && !isAnalyzing ? (
-            <div className="flex flex-col items-center justify-center w-full">
-              {!showOptions ? (
-                <button
-                  onClick={handleUploadClick}
-                  type="button"
-                  className="upload-button-home"
-                >
-                  <span className="flex items-center text-xl">
-                    <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    {t('uploadButton')}
-                  </span>
-                </button>
-                ) : (
-                <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
-                  <button
-                    onClick={handleCameraSelect}
-                    className="upload-option-button-home bg-blue-500 hover:bg-blue-600 text-white"
-                    type="button"
-                  >
-                    <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span className="text-lg">{t('takePhoto')}</span>
-                  </button>
-                  <button
-                    onClick={handleFileSelect}
-                    className="upload-option-button-home bg-purple-500 hover:bg-purple-600 text-white"
-                    type="button"
-                  >
-                    <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    <span className="text-lg">{t('uploadImage')}</span>
-                  </button>
-                </div>
-               )}
+      {/* Main content */}
+      {images.length === 0 && !isAnalyzing ? (
+        <div className="flex flex-col items-center justify-center w-full">
+          {!showOptions ? (
+            <button
+              onClick={handleUploadClick}
+              type="button"
+              className="upload-button-home"
+            >
+              <span className="flex items-center text-xl">
+                <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {t('uploadButton')}
+              </span>
+            </button>
+            ) : (
+            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+              <button
+                onClick={handleCameraSelect}
+                className="upload-option-button-home bg-blue-500 hover:bg-blue-600 text-white"
+                type="button"
+              >
+                <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-lg">{t('takePhoto')}</span>
+              </button>
+              <button
+                onClick={handleFileSelect}
+                className="upload-option-button-home bg-purple-500 hover:bg-purple-600 text-white"
+                type="button"
+              >
+                <svg className="w-7 h-7 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                <span className="text-lg">{t('uploadImage')}</span>
+              </button>
             </div>
-          ) : (
-             <div className="w-full">
-              {/* Show images */}
-              <div className="grid-layout">
-                {/* Image thumbnails column */}
-                <div className="flex flex-col">
-                  <div className="images-container">
-                    {/* Image thumbnails */}
-                    {images.map((imageUrl, index) => (
-                      <div key={index} className="image-container relative">
-                        <Image
-                          src={imageUrl}
-                          alt={`Selected ${index + 1}`}
-                          width={200}
-                          height={120}
-                          className="selected-image"
-                          style={{ objectFit: 'contain', maxHeight: '120px' }}
-                        />
-                        <button
-                          className="absolute top-1 right-1 bg-red-500 rounded-full p-1 text-white"
-                          onClick={() => handleRemoveImage(index)}
-                          type="button"
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
+           )}
+        </div>
+      ) : (
+         <div className="w-full">
+          {/* Show images */}
+          <div className="grid-layout">
+            {/* Image thumbnails column */}
+            <div className="flex flex-col">
+              <div className="images-container">
+                {/* Image thumbnails */}
+                {images.map((imageUrl, index) => (
+                  <div key={index} className="image-container relative">
+                    <Image
+                      src={imageUrl}
+                      alt={`Selected ${index + 1}`}
+                      width={200}
+                      height={120}
+                      className="selected-image"
+                      style={{ objectFit: 'contain', maxHeight: '120px' }}
+                    />
+                    <button
+                      className="absolute top-1 right-1 bg-red-500 rounded-full p-1 text-white"
+                      onClick={() => handleRemoveImage(index)}
+                      type="button"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
-                  
-                  {/* Analyze button moved to the image column for better layout */}
-                  {files.length > 0 && !aiResponse && !isAnalyzing && (
-                    <div className="mt-4 flex justify-center">
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          processImagesWithAPI(files);
-                        }}
-                        className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg text-lg transition-all duration-200 w-full transform hover:scale-105"
-                        type="button"
-                      >
-                        <div className="flex items-center justify-center">
-                          <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          {t('analyzeImages')}
-                        </div>
-                      </button>
+                ))}
+              </div>
+              
+              {/* Analyze button moved to the image column for better layout */}
+              {files.length > 0 && !aiResponse && !isAnalyzing && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      processImagesWithAPI(files);
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg text-lg transition-all duration-200 w-full transform hover:scale-105"
+                    type="button"
+                  >
+                    <div className="flex items-center justify-center">
+                      <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {t('analyzeImages')}
                     </div>
-                  )}
+                  </button>
                 </div>
-                
-                {/* AI response display column - wider and more optimized */}
-                <div className="content-container">
-                  {/* AI response display */}
-                  {aiResponse && (
-                    <div className="card">
-                      <div className="text-container">
-                        {/* Full Analysis Section */}
-                        <div>
-                          <h2 className="text-xl font-semibold mb-3">{t('fullAnalysis')}</h2>
-                          <div className="description-text text-gray-700 dark:text-gray-300">
-                            {!aiResponse.isComplete && (
-                              <div className="flex items-center mb-2">
-                                <div className="mr-2 flex space-x-1">
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                                </div>
-                                <span className="text-sm text-blue-500">{t('processingResponse')}</span>
-                              </div>
-                            )}
-                             {/* Using the new prose-container class for better content display */}
-                             <div className="prose-container">
-                                <ReactMarkdown
-                                    remarkPlugins={[remarkGfm]}
-                                    components={{
-                                      // Override paragraph to reduce spacing
-                                      p: (props) => <p className="mb-3 leading-relaxed" {...props} />,
-                                      // Optimize list spacing
-                                      ul: (props) => <ul className="mb-3 pl-5 list-disc" {...props} />,
-                                      li: (props) => <li className="mb-1 pl-1" {...props} />,
-                                      // Better heading spacing
-                                      h1: (props) => <h1 className="text-xl font-bold mb-2 mt-3" {...props} />,
-                                      h2: (props) => <h2 className="text-lg font-bold mb-2 mt-2 border-b pb-1 border-gray-200 dark:border-gray-700" {...props} />,
-                                      h3: (props) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />,
-                                      // Fix pre and code formatting
-                                      pre: (props) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2 overflow-x-auto" {...props} />,
-                                      code: (props) => <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} />
-                                    }}
-                                >
-                                    {aiResponse.content}
-                                </ReactMarkdown>
+              )}
+              
+              {/* Save Appraisal Button - only active when aiResponse is complete and user has recorded a comment */}
+              {aiResponse?.isComplete && hasRecordedComment && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={handleSaveAppraisal}
+                    disabled={isSaving}
+                    className={`${
+                      isSaving 
+                        ? 'bg-gray-400 cursor-not-allowed' 
+                        : 'bg-amber-500 hover:bg-amber-600'
+                    } text-white font-semibold py-3 px-6 rounded-lg shadow-lg text-lg transition-all duration-200 w-full transform hover:scale-105`}
+                    type="button"
+                  >
+                    <div className="flex items-center justify-center">
+                      <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                      </svg>
+                      {isSaving ? 'Saving...' : 'Save Appraisal'}
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* AI response display column - wider and more optimized */}
+            <div className="content-container">
+              {/* Show loading indicator if analyzing but no AI response yet */}
+              {isAnalyzing && !aiResponse && (
+                <div className="card">
+                  <div className="text-container">
+                    <h2 className="text-xl font-semibold mb-3">{t('fullAnalysis')}</h2>
+                    <div className="loading-analysis-container">
+                      <div className="loading-analysis-spinner"></div>
+                      <p className="loading-analysis-text">Analyzing your antique...</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* AI response display */}
+              {aiResponse && (
+                <div className="card">
+                  <div className="text-container">
+                    {/* Full Analysis Section */}
+                    <div>
+                      <h2 className="text-xl font-semibold mb-3">{t('fullAnalysis')}</h2>
+                      <div className="description-text text-gray-700 dark:text-gray-300">
+                        {!aiResponse.isComplete && (
+                          <div className="flex items-center mb-2">
+                            <div className="mr-2 flex space-x-1">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                             </div>
+                            <span className="text-sm text-blue-500">{t('processingResponse')}</span>
                           </div>
+                        )}
+                         {/* Using the new prose-container class for better content display */}
+                         <div className="prose-container">
+                            <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  // Override paragraph to reduce spacing
+                                  p: (props) => <p className="mb-3 leading-relaxed" {...props} />,
+                                  // Optimize list spacing
+                                  ul: (props) => <ul className="mb-3 pl-5 list-disc" {...props} />,
+                                  li: (props) => <li className="mb-1 pl-1" {...props} />,
+                                  // Better heading spacing
+                                  h1: (props) => <h1 className="text-xl font-bold mb-2 mt-3" {...props} />,
+                                  h2: (props) => <h2 className="text-lg font-bold mb-2 mt-2 border-b pb-1 border-gray-200 dark:border-gray-700" {...props} />,
+                                  h3: (props) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />,
+                                  // Fix pre and code formatting
+                                  pre: (props) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2 overflow-x-auto" {...props} />,
+                                  code: (props) => <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} />
+                                }}
+                            >
+                                {aiResponse.content}
+                            </ReactMarkdown>
                         </div>
                       </div>
                     </div>
-                  )}
-                  
-                  {/* Audio Recorder and Reset button container */}
-                  <div className="flex flex-wrap gap-4 justify-center mt-4">
-                    {/* Display Audio Recorder component */}
-                    {aiResponse?.isComplete && (
-                      <div className="w-full max-w-md">
-                        <AudioRecorder
-                          onTranscriptionComplete={handleTranscriptionComplete}
-                          language={language}
-                        />
-                      </div>
-                    )}
-                    
-                    {/* Reset button */}
-                    {aiResponse && (
-                      <button
-                        onClick={handleReset}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg shadow-lg text-lg transition-all duration-200 transform hover:scale-105"
-                        type="button"
-                      >
-                        <div className="flex items-center justify-center">
-                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          New Analysis
-                        </div>
-                      </button>
-                    )}
                   </div>
                 </div>
+              )}
+              
+              {/* Audio Recorder and Reset button container */}
+              <div className="flex flex-wrap gap-4 justify-center mt-4">
+          {/* Display Audio Recorder component */}
+          {aiResponse?.isComplete && (
+                  <div className="w-full max-w-md">
+              <AudioRecorder
+                onTranscriptionComplete={handleTranscriptionComplete}
+                language={language}
+                />
+            </div>
+            )}
+                
+             {/* Reset button */}
+                {aiResponse && (
+                <button
+                  onClick={handleReset}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg shadow-lg text-lg transition-all duration-200 transform hover:scale-105"
+                  type="button"
+                >
+                  <div className="flex items-center justify-center">
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    New Analysis
+                  </div>
+                </button>
+              )}
               </div>
             </div>
-          )}
+          </div>
+         </div>
+        )}
 
-          {/* Show errors */}
-          {error && (
-            <div className="mt-4 p-4 bg-red-50 text-red-600 rounded-lg">
-              {error}
-            </div>
-          )}
-        </>
+      {/* Show errors */}
+      {error && (
+        <div className="mt-4 p-4 bg-red-50 text-red-600 rounded-lg">
+          {error}
+        </div>
       )}
     </div>
   );
