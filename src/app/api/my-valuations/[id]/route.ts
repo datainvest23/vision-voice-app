@@ -1,16 +1,13 @@
 // Next.js App Router API Route with Dynamic Route Segment
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { checkAuth } from '@/utils/auth';
 
 export const dynamic = 'force-dynamic';
 
-// GET handler with the correct type for a single dynamic segment
-export async function GET(
-  request: Request | NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const { id } = params;
+// Minimal handler implementation
+export async function GET(request, context) {
+  const id = context.params.id;
 
   // Check if user is authenticated
   const authError = await checkAuth();
@@ -58,12 +55,9 @@ export async function GET(
   }
 }
 
-// DELETE handler with the correct type for a single dynamic segment
-export async function DELETE(
-  request: Request | NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const { id } = params;
+// DELETE handler with minimal typing
+export async function DELETE(request, context) {
+  const id = context.params.id;
 
   // Check if user is authenticated
   const authError = await checkAuth();
