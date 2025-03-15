@@ -5,12 +5,12 @@ import { checkAuth } from '@/utils/auth';
 
 export const dynamic = 'force-dynamic';
 
-// Use NextRequest and NextResponse types
+// GET handler with the correct type for a single dynamic segment
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
-  const { id } = context.params;
+  const { id } = params;
 
   // Check if user is authenticated
   const authError = await checkAuth();
@@ -22,11 +22,9 @@ export async function GET(
     // Get authenticated user
     const supabase = await createClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-
     if (userError || !user) {
       return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
     }
-
     const userId = user.id;
 
     if (!id) {
@@ -44,27 +42,28 @@ export async function GET(
     if (error) {
       if (error.code === 'PGRST116') {
         // Not found or not authorized
-        return NextResponse.json({ error: 'Valuation not found or you do not have permission to view it' }, { status: 404 });
+        return NextResponse.json(
+          { error: 'Valuation not found or you do not have permission to view it' },
+          { status: 404 }
+        );
       }
-
       console.error('Error fetching valuation:', error);
       return NextResponse.json({ error: 'Failed to fetch valuation' }, { status: 500 });
     }
 
     return NextResponse.json(valuation);
-
   } catch (error) {
     console.error('Valuation fetch error:', error);
     return NextResponse.json({ error: 'Failed to fetch valuation' }, { status: 500 });
   }
 }
 
-// DELETE handler using the same pattern
+// DELETE handler with the correct type for a single dynamic segment
 export async function DELETE(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
-  const { id } = context.params;
+  const { id } = params;
 
   // Check if user is authenticated
   const authError = await checkAuth();
@@ -76,11 +75,9 @@ export async function DELETE(
     // Get authenticated user
     const supabase = await createClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-
     if (userError || !user) {
       return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
     }
-
     const userId = user.id;
 
     if (!id) {
@@ -94,14 +91,18 @@ export async function DELETE(
       .eq('id', id)
       .eq('user_id', userId)
       .single();
-
     if (fetchError) {
       if (fetchError.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Valuation not found or you do not have permission to delete it' }, { status: 404 });
+        return NextResponse.json(
+          { error: 'Valuation not found or you do not have permission to delete it' },
+          { status: 404 }
+        );
       }
-
       console.error('Error checking valuation:', fetchError);
-      return NextResponse.json({ error: 'Failed to verify valuation ownership' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Failed to verify valuation ownership' },
+        { status: 500 }
+      );
     }
 
     // Delete the valuation
@@ -110,7 +111,6 @@ export async function DELETE(
       .delete()
       .eq('id', id)
       .eq('user_id', userId);
-
     if (deleteError) {
       console.error('Error deleting valuation:', deleteError);
       return NextResponse.json({ error: 'Failed to delete valuation' }, { status: 500 });
