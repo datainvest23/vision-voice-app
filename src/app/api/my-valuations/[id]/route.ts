@@ -5,13 +5,12 @@ import { checkAuth } from '@/utils/auth';
 
 export const dynamic = 'force-dynamic';
 
-// GET handler with destructured context and type adjustments
+// Use NextRequest and NextResponse types
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string | string[] } }
+  context: { params: { id: string } }
 ) {
-  // Ensure id is a string (if it's an array, use the first element)
-  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const { id } = context.params;
 
   // Check if user is authenticated
   const authError = await checkAuth();
@@ -47,23 +46,25 @@ export async function GET(
         // Not found or not authorized
         return NextResponse.json({ error: 'Valuation not found or you do not have permission to view it' }, { status: 404 });
       }
+
       console.error('Error fetching valuation:', error);
       return NextResponse.json({ error: 'Failed to fetch valuation' }, { status: 500 });
     }
 
     return NextResponse.json(valuation);
+
   } catch (error) {
     console.error('Valuation fetch error:', error);
     return NextResponse.json({ error: 'Failed to fetch valuation' }, { status: 500 });
   }
 }
 
-// DELETE handler with similar pattern and type adjustments
+// DELETE handler using the same pattern
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string | string[] } }
+  context: { params: { id: string } }
 ) {
-  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const { id } = context.params;
 
   // Check if user is authenticated
   const authError = await checkAuth();
@@ -98,6 +99,7 @@ export async function DELETE(
       if (fetchError.code === 'PGRST116') {
         return NextResponse.json({ error: 'Valuation not found or you do not have permission to delete it' }, { status: 404 });
       }
+
       console.error('Error checking valuation:', fetchError);
       return NextResponse.json({ error: 'Failed to verify valuation ownership' }, { status: 500 });
     }
