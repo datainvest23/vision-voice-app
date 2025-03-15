@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { checkAuth } from '@/utils/auth';
 import Stripe from 'stripe';
+import { cookies } from 'next/headers';
 
 // Define transaction interface
 interface Transaction {
@@ -12,19 +13,31 @@ interface Transaction {
   payment_id?: string;
 }
 
-// Initialize Stripe with your secret key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  // @ts-expect-error - API version compatibility issue
-  apiVersion: '2023-10-16',
-});
+// Initialize Stripe conditionally to prevent build errors
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
+const stripe = stripeSecretKey 
+  ? new Stripe(stripeSecretKey, {
+      // @ts-expect-error - API version compatibility issue
+      apiVersion: '2023-10-16',
+    })
+  : null;
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  // Check if user is authenticated
+  // Check authentication
   const authError = await checkAuth();
   if (authError) {
     return authError;
+  }
+
+  // Check if Stripe is initialized
+  if (!stripe) {
+    console.error('Stripe is not initialized. Missing API key.');
+    return NextResponse.json(
+      { error: 'Payment service is not configured' },
+      { status: 500 }
+    );
   }
 
   try {

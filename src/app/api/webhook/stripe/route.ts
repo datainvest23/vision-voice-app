@@ -11,11 +11,14 @@ export const config = {
 
 export const dynamic = 'force-dynamic';
 
-// Initialize Stripe with your secret key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  // @ts-expect-error - API version compatibility issue
-  apiVersion: '2023-10-16',
-});
+// Initialize Stripe conditionally to prevent build errors
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
+const stripe = stripeSecretKey 
+  ? new Stripe(stripeSecretKey, {
+      // @ts-expect-error - API version compatibility issue
+      apiVersion: '2023-10-16',
+    })
+  : null;
 
 // Helper function to get the raw body as a string
 async function getRawBody(req: NextRequest): Promise<string> {
@@ -37,20 +40,33 @@ async function getRawBody(req: NextRequest): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
-    // Get the raw body
-    const rawBody = await getRawBody(request);
+    // Get the request body as a raw string
+    const rawBody = await request.text();
     
-    // Get the signature header
-    const signature = request.headers.get('stripe-signature');
+    // Get the Stripe signature from the header
+    const signature = request.headers.get('stripe-signature') as string;
     
     if (!signature) {
-      return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 });
+      console.error('Missing Stripe signature');
+      return NextResponse.json(
+        { error: 'Missing Stripe signature' },
+        { status: 400 }
+      );
+    }
+    
+    // Check if Stripe is initialized
+    if (!stripe) {
+      console.error('Stripe is not initialized. Missing API key.');
+      return NextResponse.json(
+        { error: 'Payment service is not configured' },
+        { status: 500 }
+      );
     }
     
     // Verify the event
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(
+      event = stripe?.webhooks.constructEvent(
         rawBody,
         signature,
         process.env.STRIPE_WEBHOOK_SECRET || ''
