@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 // GET handler with the correct type for a single dynamic segment
 export async function GET(
-  request: NextRequest,
+  request: Request | NextRequest,
   { params }: { params: { id: string } }
 ) {
   const { id } = params;
@@ -60,7 +60,7 @@ export async function GET(
 
 // DELETE handler with the correct type for a single dynamic segment
 export async function DELETE(
-  request: NextRequest,
+  request: Request | NextRequest,
   { params }: { params: { id: string } }
 ) {
   const { id } = params;
