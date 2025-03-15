@@ -20,24 +20,6 @@ const stripe = stripeSecretKey
     })
   : null;
 
-// Helper function to get the raw body as a string
-async function getRawBody(req: NextRequest): Promise<string> {
-  const chunks: Uint8Array[] = [];
-  const reader = req.body?.getReader();
-  
-  if (!reader) {
-    throw new Error('Request body is empty');
-  }
-  
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  
-  return new TextDecoder().decode(Buffer.concat(chunks.map(chunk => Buffer.from(chunk))));
-}
-
 export async function POST(request: NextRequest) {
   try {
     // Get the request body as a raw string

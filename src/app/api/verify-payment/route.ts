@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { checkAuth } from '@/utils/auth';
 import Stripe from 'stripe';
-import { cookies } from 'next/headers';
 
 // Define transaction interface
 interface Transaction {
