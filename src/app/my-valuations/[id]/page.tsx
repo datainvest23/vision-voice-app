@@ -25,7 +25,7 @@ const extractStructuredSummary = (text?: string) => {
   if (!text) return null;
   
   // Look for either lines starting with '- **Item Type:' or the entire Structured Summary section
-  const structuredSummaryRegex = /(###\s*Structured\s*Summary(?:\s*\n(?:[-*]\s*\*\*[^:]+:\*\*[^\n]+|\s*\n)*)?|(?:[-*]\s*\*\*Item\s*Type:\*\*[^\n]+\s*\n?[-*]\s*\*\*Timeframe:\*\*[^\n]+\s*\n?[-*]\s*\*\*Artist:\*\*[^\n]+\s*\n?[-*]\s*\*\*Observations:\*\*[^\n]+\s*\n?[-*]\s*\*\*Estimated\s*Valuation:\*\*[^\n]+))/is;
+  const structuredSummaryRegex = /(###\s*Structured\s*Summary(?:\s*\n(?:[-*]\s*\*\*[^:]+:\*\*[^\n]+|\s*\n)*)?|(?:[-*]\s*\*\*Item\s*Type:\*\*[^\n]+\s*\n?[-*]\s*\*\*Timeframe:\*\*[^\n]+\s*\n?[-*]\s*\*\*Artist:\*\*[^\n]+\s*\n?[-*]\s*\*\*Observations:\*\*[^\n]+\s*\n?[-*]\s*\*\*Estimated\s*Valuation:\*\*[^\n]+))/i;
   
   const summaryMatch = text.match(structuredSummaryRegex);
   
