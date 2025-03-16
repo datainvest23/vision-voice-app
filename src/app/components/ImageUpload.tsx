@@ -266,6 +266,27 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
     setTranscription("");
   };
 
+  // Function to preprocess and clean up markdown text
+  const preprocessMarkdown = (text: string): string => {
+    return text
+      // Remove more than 2 consecutive line breaks to prevent excessive spacing
+      .replace(/\n{3,}/g, '\n\n')
+      // Ensure headings have proper spacing (exactly one line break before headings except at start)
+      .replace(/([^\n])\n+#/g, '$1\n\n#')
+      // Ensure only one line break after headings before content
+      .replace(/(#{1,6}[^\n]+)\n+/g, '$1\n')
+      // Clean up space around bullet points for better list formatting
+      .replace(/\n\s*-\s+/g, '\n- ')
+      .replace(/\n\s*\*\s+/g, '\n* ')
+      // Normalize numbered lists 
+      .replace(/\n\s*(\d+)\.(\s+)/g, '\n$1.$2')
+      // Ensure no empty space between list marker and content
+      .replace(/\n([-*+])\s{2,}/g, '\n$1 ')
+      // Remove extra spaces at line beginnings
+      .replace(/\n\s+/g, '\n')
+      // Ensure exactly one blank line between major sections
+      .replace(/\n\n\n+/g, '\n\n');
+  };
 
   const processImagesWithAPI = async (filesToProcess?: File[]) => {
     // Use provided files or fall back to state
@@ -409,10 +430,13 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                           case 'delta':
                               // Content deltas - add to the accumulated content
                               streamedContent += parsedData.content;
+                              // Process the streamed content to normalize formatting
+                              const processedContent = preprocessMarkdown(streamedContent);
+                              
                               setAiResponse(() => {
-                                  console.log(`📝 Updating aiResponse with delta: content length=${streamedContent.length}, isComplete=false`);
+                                  console.log(`📝 Updating aiResponse with delta: content length=${processedContent.length}, isComplete=false`);
                                   return { 
-                                      content: streamedContent, 
+                                      content: processedContent, 
                                       isComplete: false 
                                   };
                               });
@@ -431,17 +455,20 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
                                   streamedContent = parsedData.content;
                               }
                               
-                              console.log(`✅ Setting complete response: content length ${streamedContent.length} chars, isComplete: true`);
+                              // Process the final content to normalize formatting
+                              const processedFinalContent = preprocessMarkdown(streamedContent);
+                              
+                              console.log(`✅ Setting complete response: content length ${processedFinalContent.length} chars, isComplete: true`);
                               // Set with a callback to ensure we can log the before/after state
                               setAiResponse(prev => {
                                   console.log("🔄 Setting aiResponse complete:", {
                                       prevContent: prev?.content?.length || 0,
-                                      newContent: streamedContent.length,
+                                      newContent: processedFinalContent.length,
                                       prevComplete: prev?.isComplete || false,
                                       newComplete: true
                                   });
                                   return {
-                                      content: streamedContent,
+                                      content: processedFinalContent,
                                       isComplete: true
                                   };
                               });
@@ -508,67 +535,70 @@ export default function ImageUpload({ setIsLoading }: ImageUploadProps) {
 };
 
 const handleTranscriptionComplete = async (transcribedText: string) => {
-        if (!threadId) {
-          setError("No active thread to send the comment to.");
-          return;
-        }
+  if (!threadId) {
+    setError("No active thread to send the comment to.");
+    return;
+  }
 
-        setTranscription(transcribedText);
+  setTranscription(transcribedText);
 
-        try {
-          setIsAnalyzing(true);
-            //Added set isLoading
-            setIsLoading(true);
-          const response = await fetch('/api/send-message', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              threadId,
-              message: transcribedText,
-              language,
-            }),
-          });
+  try {
+    setIsAnalyzing(true);
+    setIsLoading(true);
+    const response = await fetch('/api/send-message', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        threadId,
+        message: transcribedText,
+        language,
+      }),
+    });
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to send comment');
-          }
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to send comment');
+    }
 
-          // Stream the response
-          if (!response.body) {
-            throw new Error('No response body available');
-          }
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let streamedContent = '';
+    // Stream the response
+    if (!response.body) {
+      throw new Error('No response body available');
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let streamedContent = '';
 
-           while (true) {
-                const { done, value } = await reader.read();
+    while (true) {
+      const { done, value } = await reader.read();
 
-                if (done) {
-                  setAiResponse(() => ({ content: streamedContent, isComplete: true }));
-                  break;
-                }
-                const chunk = decoder.decode(value, { stream: true });
-                streamedContent += chunk; // Accumulate content
-                setAiResponse(() => ({ content: streamedContent, isComplete: false }));
-            }
+      if (done) {
+        // Process the final content for better formatting
+        const processedContent = preprocessMarkdown(streamedContent);
+        setAiResponse(() => ({ content: processedContent, isComplete: true }));
+        break;
+      }
+      const chunk = decoder.decode(value, { stream: true });
+      streamedContent += chunk; // Accumulate content
+      
+      // Process content with each chunk
+      const processedContent = preprocessMarkdown(streamedContent);
+      setAiResponse(() => ({ content: processedContent, isComplete: false }));
+    }
 
-            // Mark that a comment has been recorded and processed
-            setHasRecordedComment(true);
+    // Mark that a comment has been recorded and processed
+    setHasRecordedComment(true);
 
-        } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : 'Failed to send comment';
-          setError(errorMessage);
-          console.error('Error sending comment to assistant:', error);
-        } finally {
-          setIsAnalyzing(false);
-            //Added set isLoading
-            setIsLoading(false);
-        }
-      };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to send comment';
+    setError(errorMessage);
+    console.error('Error sending comment to assistant:', error);
+  } finally {
+    setIsAnalyzing(false);
+    setIsLoading(false);
+  }
+};
 
   // New function to handle saving the appraisal
   const handleSaveAppraisal = async () => {
@@ -589,7 +619,7 @@ const handleTranscriptionComplete = async (transcribedText: string) => {
         images: images,
         assistantResponse: aiResponse.content,
         assistantFollowUp: '', // This would be the follow-up response if any
-        isDetailed: true
+        isDetailed: false  // Changed from true to false to avoid payment requirement
       };
 
       // Call the save-to-supabase API
@@ -598,6 +628,7 @@ const handleTranscriptionComplete = async (transcribedText: string) => {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(appraisalData),
       });
 
@@ -800,21 +831,26 @@ const handleTranscriptionComplete = async (transcribedText: string) => {
                             <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
-                                  // Override paragraph to reduce spacing
-                                  p: (props) => <p className="mb-3 leading-relaxed" {...props} />,
+                                  // More compact paragraphs with better spacing
+                                  p: (props) => <p className="my-1" {...props} />,
                                   // Optimize list spacing
-                                  ul: (props) => <ul className="mb-3 pl-5 list-disc" {...props} />,
-                                  li: (props) => <li className="mb-1 pl-1" {...props} />,
-                                  // Better heading spacing
-                                  h1: (props) => <h1 className="text-xl font-bold mb-2 mt-3" {...props} />,
-                                  h2: (props) => <h2 className="text-lg font-bold mb-2 mt-2 border-b pb-1 border-gray-200 dark:border-gray-700" {...props} />,
-                                  h3: (props) => <h3 className="text-md font-bold mb-1 mt-2" {...props} />,
+                                  ul: (props) => <ul className="list-disc pl-5 my-1" {...props} />,
+                                  ol: (props) => <ol className="list-decimal pl-5 my-1" {...props} />,
+                                  li: (props) => <li className="mb-0.5" {...props} />,
+                                  // Better heading hierarchy with less spacing
+                                  h1: (props) => <h1 className="text-xl font-bold mt-3 mb-1" {...props} />,
+                                  h2: (props) => <h2 className="text-lg font-bold mt-2 mb-1" {...props} />,
+                                  h3: (props) => <h3 className="text-md font-semibold mt-2 mb-1" {...props} />,
                                   // Fix pre and code formatting
-                                  pre: (props) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2 overflow-x-auto" {...props} />,
-                                  code: (props) => <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} />
+                                  pre: (props) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded my-1 overflow-x-auto" {...props} />,
+                                  code: (props) => <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props} />,
+                                  // Proper blockquote styling
+                                  blockquote: (props) => <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-3 italic text-gray-700 dark:text-gray-300 my-1" {...props} />,
+                                  // Add horizontal rule styling
+                                  hr: (props) => <hr className="border-t border-gray-200 dark:border-gray-700 my-2" {...props} />
                                 }}
                             >
-                                {aiResponse.content}
+                                {preprocessMarkdown(aiResponse.content)}
                             </ReactMarkdown>
                         </div>
                       </div>

@@ -276,9 +276,164 @@ body {
 
 /* Enhanced prose container for markdown content */
 .prose-container {
-  @apply max-w-none border border-gray-100 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800/50;
+  max-width: none;
   width: 100%;
+  padding: 1rem;
+  background-color: white;
+  border-radius: 0.5rem;
   overflow-wrap: break-word;
+  line-height: 1.5;
+  font-size: 1rem;
+  color: #374151;
+}
+
+/* Dark mode for prose container */
+@media (prefers-color-scheme: dark) {
+  .prose-container {
+    background-color: rgba(31, 41, 55, 0.5);
+    color: #e5e7eb;
+  }
+}
+
+/* Base margins for prose elements */
+.prose-container > * {
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+/* Heading styles - more compact */
+.prose-container h1,
+.prose-container h2,
+.prose-container h3,
+.prose-container h4,
+.prose-container h5,
+.prose-container h6 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.prose-container h1 {
+  font-size: 1.5em;
+}
+
+.prose-container h2 {
+  font-size: 1.25em;
+}
+
+.prose-container h3 {
+  font-size: 1.125em;
+}
+
+/* Make paragraphs more compact */
+.prose-container p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+/* Fix for consecutive paragraphs */
+.prose-container p + p {
+  margin-top: 0.5em;
+}
+
+/* Fix for paragraphs after headings - reduce space */
+.prose-container h1 + p,
+.prose-container h2 + p,
+.prose-container h3 + p {
+  margin-top: 0.3em;
+}
+
+/* Empty paragraphs should not take up space */
+.prose-container p:empty {
+  display: none;
+}
+
+/* Lists - more compact with better alignment */
+.prose-container ul,
+.prose-container ol {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1.5em;
+}
+
+.prose-container li {
+  margin-top: 0.2em;
+  margin-bottom: 0.2em;
+  padding-left: 0.25em;
+}
+
+/* Nested lists */
+.prose-container ul ul,
+.prose-container ol ol,
+.prose-container ul ol,
+.prose-container ol ul {
+  margin-top: 0.2em;
+  margin-bottom: 0.2em;
+}
+
+/* List items containing only a single paragraph */
+.prose-container li > p:only-child {
+  margin: 0;
+}
+
+/* Blockquotes */
+.prose-container blockquote {
+  border-left-width: 2px;
+  border-left-color: #e5e7eb;
+  padding-left: 1em;
+  font-style: italic;
+  margin: 0.75em 0;
+}
+
+/* Dark mode for blockquotes */
+@media (prefers-color-scheme: dark) {
+  .prose-container blockquote {
+    border-left-color: #4b5563;
+  }
+}
+
+/* Code blocks */
+.prose-container code {
+  font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+}
+
+.prose-container pre {
+  margin: 0.75em 0;
+  overflow-x: auto;
+  padding: 1em;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 6px;
+}
+
+/* Dark mode for code blocks */
+@media (prefers-color-scheme: dark) {
+  .prose-container code,
+  .prose-container pre {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Images */
+.prose-container img {
+  max-width: 100%;
+  max-height: 180px;
+}
+
+/* Improve text selection color */
+.prose-container ::selection {
+  background-color: rgba(96, 165, 250, 0.3);
+}
+
+/* Additional spacing after sections with headings */
+.prose-container h1 + p,
+.prose-container h2 + p,
+.prose-container h3 + p {
+  margin-top: 0.5em;
 }
 
 /* Add basic typography styles to replace prose classes */
@@ -288,11 +443,14 @@ body {
 .prose-container h4,
 .prose-container h5,
 .prose-container h6 {
-  @apply font-semibold my-4;
+  @apply font-semibold text-gray-800 dark:text-gray-200;
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
 }
 
 .prose-container h1 {
-  @apply text-2xl;
+  @apply text-2xl border-b pb-2 border-gray-200 dark:border-gray-700;
+  margin-top: 1em;
 }
 
 .prose-container h2 {
@@ -304,12 +462,18 @@ body {
 }
 
 .prose-container p {
-  @apply my-3;
+  margin: 0.75em 0;
+}
+
+/* Fix for multiple consecutive paragraphs */
+.prose-container p + p {
+  margin-top: 0.5em;
 }
 
 .prose-container ul,
 .prose-container ol {
-  @apply my-3 pl-6;
+  margin: 0.75em 0;
+  padding-left: 1.5em;
 }
 
 .prose-container ul {
@@ -321,11 +485,19 @@ body {
 }
 
 .prose-container li {
-  @apply mb-1;
+  margin-bottom: 0.25em;
+}
+
+/* Fix for nested lists */
+.prose-container li > ul,
+.prose-container li > ol {
+  margin: 0.25em 0 0.5em 1em;
 }
 
 .prose-container blockquote {
-  @apply border-l-4 border-gray-200 dark:border-gray-700 pl-4 italic my-4;
+  @apply border-l-4 border-gray-200 dark:border-gray-700 pl-4 italic;
+  margin: 1em 0;
+  color: #6b7280;
 }
 
 .prose-container code {
@@ -333,11 +505,23 @@ body {
 }
 
 .prose-container pre {
-  @apply bg-gray-100 dark:bg-gray-800 p-3 rounded my-4 overflow-x-auto;
+  @apply bg-gray-100 dark:bg-gray-800 p-3 rounded overflow-x-auto;
+  margin: 1em 0;
 }
 
 .prose-container img {
-  @apply my-4 rounded;
+  @apply rounded;
+  margin: 1em 0;
+}
+
+/* Fix for empty paragraphs that cause unnecessary space */
+.prose-container p:empty {
+  display: none;
+}
+
+/* Add a subtle separator for different sections in the analysis */
+.prose-container hr {
+  @apply border-t border-gray-200 dark:border-gray-700 my-4;
 }
 
 /* Markdown styling enhancements */

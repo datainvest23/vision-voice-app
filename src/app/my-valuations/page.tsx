@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import Image from 'next/image';
 import Link from 'next/link';
 
 interface Valuation {
@@ -10,6 +11,7 @@ interface Valuation {
   summary: string;
   created_at: string;
   is_detailed: boolean;
+  images?: string[];
 }
 
 interface PaginationInfo {
@@ -18,6 +20,34 @@ interface PaginationInfo {
   pageSize: number;
   totalPages: number;
 }
+
+// Function to extract structured summary fields from markdown text
+const extractStructuredSummary = (text: string) => {
+  if (!text) return null;
+  
+  const fields = {
+    itemType: '',
+    timeframe: '',
+    artist: '',
+    observations: '',
+    estimatedValuation: ''
+  };
+  
+  // Look for specific field patterns
+  const itemTypeMatch = text.match(/\*\*Item Type:\*\*\s*([^\n]+)/i);
+  const timeframeMatch = text.match(/\*\*Timeframe:\*\*\s*([^\n]+)/i);
+  const artistMatch = text.match(/\*\*Artist:\*\*\s*([^\n]+)/i);
+  const observationsMatch = text.match(/\*\*Observations:\*\*\s*([^\n]+)/i);
+  const valuationMatch = text.match(/\*\*Estimated Valuation:\*\*\s*([^\n]+)/i);
+  
+  if (itemTypeMatch) fields.itemType = itemTypeMatch[1].trim();
+  if (timeframeMatch) fields.timeframe = timeframeMatch[1].trim();
+  if (artistMatch) fields.artist = artistMatch[1].trim();
+  if (observationsMatch) fields.observations = observationsMatch[1].trim();
+  if (valuationMatch) fields.estimatedValuation = valuationMatch[1].trim();
+  
+  return fields;
+};
 
 export default function MyValuationsPage() {
   const [valuations, setValuations] = useState<Valuation[]>([]);
@@ -80,7 +110,7 @@ export default function MyValuationsPage() {
   };
 
   return (
-    <main className="container mx-auto py-12 px-4 max-w-5xl">
+    <main className="container mx-auto py-12 px-4 max-w-6xl">
       <h1 className="text-3xl font-bold mb-8 text-center">{t('valuationsHeading')}</h1>
       
       {isLoading ? (
@@ -106,44 +136,120 @@ export default function MyValuationsPage() {
         </div>
       ) : (
         <>
-          <div className="grid gap-6">
-            {valuations.map((valuation) => (
-              <Link 
-                key={valuation.id}
-                href={`/my-valuations/${valuation.id}`}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 transition-transform hover:scale-[1.01] block"
-              >
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="flex-1">
-                    <h2 className="text-xl font-semibold mb-2">{valuation.title}</h2>
-                    <p className="text-gray-600 dark:text-gray-400 line-clamp-2">{valuation.summary}</p>
-                    <p className="text-gray-500 dark:text-gray-500 text-sm mt-2">
-                      {t('createdOn')}: {formatDate(valuation.created_at)}
-                    </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {valuations.map((valuation) => {
+              // Extract structured summary if available
+              const summaryData = extractStructuredSummary(valuation.summary);
+              
+              return (
+                <Link 
+                  key={valuation.id}
+                  href={`/my-valuations/${valuation.id}`}
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden transition-transform hover:scale-[1.02] block group h-full"
+                >
+                  <div className="flex flex-col h-full">
+                    {/* Card Header with Image */}
+                    <div className="relative h-48 bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                      {valuation.images && valuation.images[0] ? (
+                        <Image 
+                          src={valuation.images[0]} 
+                          alt={valuation.title}
+                          fill
+                          className="object-cover group-hover:scale-105 transition-transform duration-500"
+                          sizes="(max-width: 768px) 100vw, 50vw"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <svg className="w-16 h-16 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="absolute top-3 right-3">
+                        <span className={`text-sm font-semibold px-3 py-1 rounded-full ${
+                          valuation.is_detailed 
+                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/80 dark:text-purple-200' 
+                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200'
+                        }`}>
+                          {valuation.is_detailed ? t('detailed') : t('standard')}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Card Body */}
+                    <div className="p-6 flex-1 flex flex-col">
+                      <h2 className="text-xl font-semibold mb-3 text-gray-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        {valuation.title}
+                      </h2>
+                      
+                      {/* Structured Summary Section */}
+                      {summaryData ? (
+                        <div className="grid grid-cols-1 gap-2 mb-3">
+                          {summaryData.itemType && (
+                            <div className="flex items-start">
+                              <span className="font-semibold text-gray-700 dark:text-gray-300 min-w-[110px]">Item Type:</span>
+                              <span className="text-gray-600 dark:text-gray-400">{summaryData.itemType}</span>
+                            </div>
+                          )}
+                          
+                          {summaryData.timeframe && (
+                            <div className="flex items-start">
+                              <span className="font-semibold text-gray-700 dark:text-gray-300 min-w-[110px]">Timeframe:</span>
+                              <span className="text-gray-600 dark:text-gray-400">{summaryData.timeframe}</span>
+                            </div>
+                          )}
+                          
+                          {summaryData.artist && (
+                            <div className="flex items-start">
+                              <span className="font-semibold text-gray-700 dark:text-gray-300 min-w-[110px]">Artist:</span>
+                              <span className="text-gray-600 dark:text-gray-400">{summaryData.artist}</span>
+                            </div>
+                          )}
+                          
+                          {summaryData.estimatedValuation && (
+                            <div className="flex items-start">
+                              <span className="font-semibold text-gray-700 dark:text-gray-300 min-w-[110px]">Valuation:</span>
+                              <span className="text-green-600 dark:text-green-400 font-medium">{summaryData.estimatedValuation}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
+                          {valuation.summary}
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center justify-between mt-auto pt-2 text-gray-500 dark:text-gray-400 text-sm">
+                        <div className="flex items-center">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span>{formatDate(valuation.created_at)}</span>
+                        </div>
+                        
+                        <span className="inline-flex items-center text-blue-600 dark:text-blue-400">
+                          View details
+                          <svg className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  
-                  <div className="flex items-center">
-                    <span className={`text-sm font-semibold px-3 py-1 rounded-full ${
-                      valuation.is_detailed 
-                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' 
-                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                    }`}>
-                      {valuation.is_detailed ? t('detailed') : t('standard')}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
           
           {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="flex justify-center mt-8">
+            <div className="flex justify-center mt-10">
               <nav className="flex items-center gap-2">
                 <button
                   onClick={() => handlePageChange(pagination.page - 1)}
                   disabled={pagination.page === 1}
-                  className="px-3 py-1 rounded border border-gray-300 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg border border-gray-300 disabled:opacity-50 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 transition-colors"
+                  aria-label="Previous page"
                 >
                   &laquo;
                 </button>
@@ -152,10 +258,10 @@ export default function MyValuationsPage() {
                   <button
                     key={i}
                     onClick={() => handlePageChange(i + 1)}
-                    className={`px-3 py-1 rounded ${
+                    className={`px-4 py-2 rounded-lg transition-colors ${
                       pagination.page === i + 1
-                        ? 'bg-blue-600 text-white'
-                        : 'border border-gray-300'
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'border border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800'
                     }`}
                   >
                     {i + 1}
@@ -165,7 +271,8 @@ export default function MyValuationsPage() {
                 <button
                   onClick={() => handlePageChange(pagination.page + 1)}
                   disabled={pagination.page === pagination.totalPages}
-                  className="px-3 py-1 rounded border border-gray-300 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg border border-gray-300 disabled:opacity-50 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 transition-colors"
+                  aria-label="Next page"
                 >
                   &raquo;
                 </button>

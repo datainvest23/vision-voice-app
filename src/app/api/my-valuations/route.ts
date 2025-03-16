@@ -34,10 +34,10 @@ export async function GET(request: NextRequest) {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     
-    // Get all valuations for the user with pagination
+    // Get all valuations for the user with pagination, including images
     const { data: valuations, error, count } = await supabase
       .from('valuations')
-      .select('id, title, summary, created_at, is_detailed', { count: 'exact' })
+      .select('id, title, summary, created_at, is_detailed, images', { count: 'exact' })
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -50,9 +50,18 @@ export async function GET(request: NextRequest) {
       );
     }
     
+    // Process the valuations to clean up the data
+    const processedValuations = valuations.map(valuation => ({
+      ...valuation,
+      // Ensure we have at least an empty array for images
+      images: valuation.images || [],
+      // Limit summary length
+      summary: valuation.summary?.substring(0, 300) || ''
+    }));
+    
     // Return valuations with pagination info
     return NextResponse.json({
-      valuations,
+      valuations: processedValuations,
       pagination: {
         total: count || 0,
         page,

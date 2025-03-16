@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAuth } from '@/utils/auth';
+import { createClient } from '@/utils/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +9,17 @@ export async function POST(request: NextRequest) {
   const authError = await checkAuth();
   if (authError) {
     return authError;
+  }
+
+  // Get the user session to ensure we have valid authentication
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    return NextResponse.json(
+      { error: 'Authentication session expired. Please login again.' },
+      { status: 401 }
+    );
   }
 
   // Instead of directly saving to Supabase, forward the request to our new create-valuation API
@@ -32,9 +44,9 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Pass through authorization headers
-        ...(request.headers.get('authorization') 
-          ? { 'authorization': request.headers.get('authorization')! } 
+        // Pass through cookie header if it exists
+        ...(request.headers.get('cookie') 
+          ? { 'cookie': request.headers.get('cookie')! } 
           : {})
       },
       body: JSON.stringify(valuationData)

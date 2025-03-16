@@ -60,7 +60,23 @@ export async function POST(request: NextRequest) {
                 - Condition assessment
                 - Stylistic elements and artistic significance
                 - Market value range and factors affecting value
-                - Authenticity considerations`
+                - Authenticity considerations
+                - Any other relevant information that would help the user make an informed decision
+                - DO NOT ask any further questions at this point.
+                
+                ## Structured Summary (Always Include)
+                
+                IMPORTANT: Always end your response with a concise structured summary in the exact format below:
+                
+                ### Structured Summary
+                
+                - **Item Type:** [Clearly stated type]
+                - **Timeframe:** [Estimated era or exact dates]
+                - **Artist:** [Identified artist or school, or clearly state "Unknown"]
+                - **Observations:** [Key distinguishing observations briefly summarized]
+                - **Estimated Valuation:** [Precise valuation range in EUR]
+                
+                This structured summary is critical as it will be displayed prominently in the UI.`
             }
           );
           

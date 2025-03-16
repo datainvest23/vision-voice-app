@@ -30,22 +30,35 @@ export async function POST(request: NextRequest) {
   // Check authentication
   const authError = await checkAuth();
   if (authError) {
+    console.error('Authentication failed in create-valuation API:', authError);
     return authError;
   }
 
   try {
     // Get authenticated user
     const supabase = await createClient();
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session) {
+      console.error('Session error in create-valuation:', sessionError);
+      return NextResponse.json(
+        { error: 'Authentication session invalid or expired. Please login again.' },
+        { status: 401 }
+      );
+    }
+    
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError || !user) {
+      console.error('User error in create-valuation:', userError);
       return NextResponse.json(
-        { error: 'Authentication failed' },
+        { error: 'Authentication failed or user not found' },
         { status: 401 }
       );
     }
     
     const userId = user.id;
+    console.log('User authenticated successfully, user ID:', userId);
     
     // Parse request body
     const requestData: CreateValuationRequest = await request.json();
