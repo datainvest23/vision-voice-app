@@ -6,8 +6,8 @@ export const dynamic = 'force-dynamic';
 
 // Get a single valuation by ID
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  req: NextRequest,
+  { params }: { params: { id: string }}
 ) {
   // Check authentication
   const authError = await checkAuth();
@@ -17,28 +17,22 @@ export async function GET(
 
   try {
     // Get the ID from the URL parameter
-    const valuationId = params.id;
-    if (!valuationId) {
-      return NextResponse.json({ error: 'Valuation ID is required' }, { status: 400 });
-    }
-
+    const id = params.id;
+    
     // Get authenticated user
     const supabase = await createClient();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
     
-    if (userError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication failed' },
-        { status: 401 }
-      );
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
     }
-
+    
     // Get the valuation with the given ID
     const { data: valuation, error } = await supabase
       .from('valuations')
       .select('*')
-      .eq('id', valuationId)
-      .eq('user_id', user.id) // Ensure the user owns this valuation
+      .eq('id', id)
+      .eq('user_id', session.user.id)
       .single();
 
     if (error) {
@@ -61,8 +55,8 @@ export async function GET(
 
 // Delete a valuation by ID
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  req: NextRequest,
+  { params }: { params: { id: string }}
 ) {
   // Check authentication
   const authError = await checkAuth();
@@ -72,29 +66,23 @@ export async function DELETE(
 
   try {
     // Get the ID from the URL parameter
-    const valuationId = params.id;
-    if (!valuationId) {
-      return NextResponse.json({ error: 'Valuation ID is required' }, { status: 400 });
-    }
-
+    const id = params.id;
+    
     // Get authenticated user
     const supabase = await createClient();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
     
-    if (userError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication failed' },
-        { status: 401 }
-      );
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
     }
-
-    // First check if the valuation exists and belongs to the user
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { data: _valuation, error: fetchError } = await supabase
+    
+    // Check if the valuation exists and belongs to the user
+    // We don't need to use the result, just check if there's an error
+    const { error: fetchError } = await supabase
       .from('valuations')
       .select('id')
-      .eq('id', valuationId)
-      .eq('user_id', user.id)
+      .eq('id', id)
+      .eq('user_id', session.user.id)
       .single();
 
     if (fetchError) {
@@ -108,15 +96,15 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from('valuations')
       .delete()
-      .eq('id', valuationId)
-      .eq('user_id', user.id);
+      .eq('id', id)
+      .eq('user_id', session.user.id);
 
     if (deleteError) {
       console.error('Error deleting valuation:', deleteError);
       return NextResponse.json({ error: 'Failed to delete valuation' }, { status: 500 });
     }
 
-    return NextResponse.json({ message: `Valuation ${valuationId} deleted successfully` });
+    return NextResponse.json({ message: `Valuation ${id} deleted successfully` });
   } catch (error) {
     console.error('Valuation deletion error:', error);
     return NextResponse.json(
