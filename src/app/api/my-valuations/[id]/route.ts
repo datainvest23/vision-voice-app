@@ -4,10 +4,16 @@ import { checkAuth } from '@/utils/auth';
 
 export const dynamic = 'force-dynamic';
 
+type RouteContextParams = {
+  params: {
+    id: string;
+  };
+};
+
 // Get a single valuation by ID
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: RouteContextParams
 ) {
   // Check authentication
   const authError = await checkAuth();
@@ -17,7 +23,7 @@ export async function GET(
 
   try {
     // Ensure params is awaited if it's a promise
-    const valuationId = context.params?.id;
+    const valuationId = params?.id;
     if (!valuationId) {
       return NextResponse.json({ error: 'Valuation ID is required' }, { status: 400 });
     }
@@ -62,7 +68,7 @@ export async function GET(
 // Delete a valuation by ID
 export async function DELETE(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: RouteContextParams
 ) {
   // Check authentication
   const authError = await checkAuth();
@@ -72,7 +78,7 @@ export async function DELETE(
 
   try {
     // Ensure params is awaited if it's a promise
-    const valuationId = context.params?.id;
+    const valuationId = params?.id;
     if (!valuationId) {
       return NextResponse.json({ error: 'Valuation ID is required' }, { status: 400 });
     }
