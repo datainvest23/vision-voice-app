@@ -1,13 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { checkAuth } from '@/utils/auth';
 
 export const dynamic = 'force-dynamic';
 
-// Get a single valuation by ID
+// Define a minimal route handler
 export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string }}
+  request: NextRequest
 ) {
   // Check authentication
   const authError = await checkAuth();
@@ -16,15 +15,20 @@ export async function GET(
   }
 
   try {
-    // Get the ID from the URL parameter
-    const id = params.id;
+    // Extract ID from URL path directly
+    const pathname = request.nextUrl.pathname;
+    const id = pathname.split('/').pop();
+    
+    if (!id) {
+      return Response.json({ error: 'Valuation ID is required' }, { status: 400 });
+    }
     
     // Get authenticated user
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
     
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
+      return Response.json({ error: 'Authentication failed' }, { status: 401 });
     }
     
     // Get the valuation with the given ID
@@ -38,15 +42,15 @@ export async function GET(
     if (error) {
       console.error('Error fetching valuation:', error);
       if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Valuation not found' }, { status: 404 });
+        return Response.json({ error: 'Valuation not found' }, { status: 404 });
       }
-      return NextResponse.json({ error: 'Failed to fetch valuation' }, { status: 500 });
+      return Response.json({ error: 'Failed to fetch valuation' }, { status: 500 });
     }
 
-    return NextResponse.json({ valuation });
+    return Response.json({ valuation });
   } catch (error) {
     console.error('Valuation fetch error:', error);
-    return NextResponse.json(
+    return Response.json(
       { error: 'Failed to fetch valuation details' },
       { status: 500 }
     );
@@ -55,8 +59,7 @@ export async function GET(
 
 // Delete a valuation by ID
 export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string }}
+  request: NextRequest
 ) {
   // Check authentication
   const authError = await checkAuth();
@@ -65,19 +68,23 @@ export async function DELETE(
   }
 
   try {
-    // Get the ID from the URL parameter
-    const id = params.id;
+    // Extract ID from URL path directly
+    const pathname = request.nextUrl.pathname;
+    const id = pathname.split('/').pop();
+    
+    if (!id) {
+      return Response.json({ error: 'Valuation ID is required' }, { status: 400 });
+    }
     
     // Get authenticated user
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
     
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
+      return Response.json({ error: 'Authentication failed' }, { status: 401 });
     }
     
     // Check if the valuation exists and belongs to the user
-    // We don't need to use the result, just check if there's an error
     const { error: fetchError } = await supabase
       .from('valuations')
       .select('id')
@@ -87,9 +94,9 @@ export async function DELETE(
 
     if (fetchError) {
       if (fetchError.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Valuation not found or you do not have permission to delete it' }, { status: 404 });
+        return Response.json({ error: 'Valuation not found or you do not have permission to delete it' }, { status: 404 });
       }
-      return NextResponse.json({ error: 'Failed to verify valuation ownership' }, { status: 500 });
+      return Response.json({ error: 'Failed to verify valuation ownership' }, { status: 500 });
     }
 
     // Delete the valuation
@@ -101,13 +108,13 @@ export async function DELETE(
 
     if (deleteError) {
       console.error('Error deleting valuation:', deleteError);
-      return NextResponse.json({ error: 'Failed to delete valuation' }, { status: 500 });
+      return Response.json({ error: 'Failed to delete valuation' }, { status: 500 });
     }
 
-    return NextResponse.json({ message: `Valuation ${id} deleted successfully` });
+    return Response.json({ message: `Valuation ${id} deleted successfully` });
   } catch (error) {
     console.error('Valuation deletion error:', error);
-    return NextResponse.json(
+    return Response.json(
       { error: 'Failed to delete valuation' },
       { status: 500 }
     );
