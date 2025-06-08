@@ -1,4 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Antiques Appraisal App
+
+## 1. Introduction
+
+### 1.1. Product Overview
+
+**Antiques Appraisal** is a web application that enables users to:
+
+- Upload images of antique items.
+- Record audio notes describing the items.
+- Have their audio automatically transcribed.
+- Receive an AI-powered antiques appraisal (report and valuation).
+- Save all data securely to Airtable for future reference.
+
+With the introduction of **Supabase** authentication, **users must be logged in** before accessing any core functionality (uploading images, recording audio, or receiving appraisals).
+
+### 1.2. Key Objectives
+
+- Provide a secure, user-friendly interface for authenticated users to upload images and record voice notes describing their antiques.
+- Transcribe audio recordings and send both images and transcriptions to a specialized “Antiques_Appraisal” assistant for a report and valuation.
+- Store images, transcriptions, and AI-generated appraisal reports in Airtable, tied to individual user accounts via Supabase.
+
+### 1.3. Target Users
+
+- Collectors, hobbyists, and professionals who want quick appraisals of their antiques.
+- Museums, auction houses, and curators needing initial valuations or background details on artifacts.
+- Individuals documenting family heirlooms or rare finds, with secure login for privacy.
+- Anyone requiring an accessible, AI-driven solution for cataloging and evaluating antiques.
+
+---
+
+## 2. Functional Requirements
+
+- User Authentication (Supabase)
+- User Interface (UI)
+- Image Upload
+- Audio Recording
+- Transcription
+- AI Appraisal Submission
+- AI-Generated Report and Valuation
+- Data Storage
+- User Feedback
+
+---
+
+## 3. Non-Functional Requirements
+
+- Performance
+- Security
+- Usability
+- Reliability
+- Scalability
+- Maintainability
+
+---
+
+## 4. System Architecture
+
+- **Frontend:**
+    - Next.js with React (TypeScript or JavaScript) for the user interface and routing.
+    - Integration with Supabase client libraries for user authentication.
+- **Backend:**
+    - Next.js API routes (Node.js) for handling file uploads, transcriptions, and AI appraisal requests.
+    - OpenAI API for transcription (Whisper) and antiques appraisal (GPT-based assistant).
+- **Database & Authentication:**
+    - **Supabase** for user accounts, sessions, and authentication flows.
+    - **Airtable** for storing images, transcripts, and appraisal reports.
+
+---
+
+## 5. Development Tools and Technologies
+
+- **Frontend:**
+    - Next.js (React, TypeScript)
+    - Tailwind CSS (or other styling frameworks as used in your project)
+    - Supabase client (for auth and possibly data fetches)
+- **Backend:**
+    - Node.js (via Next.js API routes)
+    - OpenAI API (audio transcription, antiques appraisal)
+    - Airtable API (data persistence)
+- **Version Control and Deployment:**
+    - Git (local or remote repository)
+    - CI/CD pipeline (optional)
+    - Cloud hosting (e.g., Vercel, Netlify)
+
+---
 
 ## Getting Started
 
