@@ -35,29 +35,28 @@ export const AuthProvider = ({
   const supabase = createClient();
 
   useEffect(() => {
-    const getSession = async () => {
-      setIsLoading(true);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    setIsLoading(true);
+
+    // Subscribe to auth state changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+    });
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
+    });
 
-      const { data } = supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          setSession(session);
-          setUser(session?.user ?? null);
-        }
-      );
-
-      return () => {
-        data.subscription.unsubscribe();
-      };
+    // Clean up subscription on unmount
+    return () => {
+      subscription.unsubscribe();
     };
-
-    getSession();
-  }, [supabase.auth]);
+  }, [supabase]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
